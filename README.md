@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 5 — QLoRA fine-tuning pipeline ✅** (dry-run is CPU-only; real training is optional and GPU-bound)
+**Current status: Phase 6 — Fine-tuned evaluation & before/after benchmark ✅** (mock comparison is CPU-only; real adapter/merged eval is GPU-bound)
 
 ---
 
@@ -50,7 +50,7 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 3 | Chunking + instruction dataset generation (JSONL) | ✅ Done |
 | 4 | Baseline evaluation (base Mistral-7B, mock + real backends) | ✅ Done |
 | 5 | QLoRA fine-tuning pipeline (dry-run + real) | ✅ Done |
-| 6 | Fine-tuned evaluation + benchmark report | ⏳ Planned |
+| 6 | Fine-tuned evaluation + before/after benchmark | ✅ Done |
 | 7 | vLLM serving | ⏳ Planned |
 | 8 | FastAPI backend (auth, logging, disclaimer) | ⏳ Planned |
 | 9 | Frontend demo | ⏳ Planned |
@@ -348,6 +348,63 @@ tasks), numeric match (metric extraction), classification accuracy
 (outlook/hallucination), and a lightweight `lexical_faithfulness` proxy (a real
 NLI/LLM-judge metric replaces it later). See
 [docs/eval_guide.md](docs/eval_guide.md).
+
+## Fine-tuned evaluation & benchmark (Phase 6)
+
+Evaluate the fine-tuned model on **the same held-out test set** as the baseline
+(identical prompts + metrics — that's what makes the before/after delta valid),
+then generate the comparison artifacts and a publishable benchmark report.
+
+Three backends: **`mock`** (CPU/CI), **`adapter`** (base + LoRA adapter, GPU),
+**`merged`** (merged model, GPU).
+
+> ⚠️ **Mock results are for pipeline validation only — not real benchmark
+> numbers.** Run the `adapter`/`merged` backend on a GPU for headline figures.
+
+**Mock run:**
+
+```bash
+python evaluation/run_finetuned_eval.py \
+  --test-file tests/fixtures/eval_test_sample.jsonl \
+  --baseline-results tests/fixtures/baseline_results_sample.json \
+  --baseline-predictions tests/fixtures/baseline_predictions_sample.jsonl \
+  --output-dir /tmp/finsage_finetuned_eval --backend mock --max-examples 20
+```
+
+**Adapter / merged (GPU):**
+
+```bash
+python evaluation/run_finetuned_eval.py \
+  --test-file data/datasets/test.jsonl \
+  --baseline-results reports/figures/baseline_results.json \
+  --baseline-predictions reports/figures/baseline_predictions.jsonl \
+  --model-id mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter-path checkpoints/finsage-7b \
+  --output-dir reports/figures --backend adapter --device auto --load-in-4bit --max-examples 200
+# merged: drop --model-id/--adapter-path and pass --merged-model-path checkpoints/finsage-7b-merged --backend merged
+```
+
+**Compare already-generated outputs** (no re-inference):
+
+```bash
+python evaluation/compare_models.py \
+  --baseline-results reports/figures/baseline_results.json \
+  --baseline-predictions reports/figures/baseline_predictions.jsonl \
+  --finetuned-results reports/figures/finetuned_results.json \
+  --finetuned-predictions reports/figures/finetuned_predictions.jsonl \
+  --output-dir reports/figures --report-path reports/benchmark_report.md
+```
+
+`make eval-finetuned` (mock), `eval-finetuned-adapter`, `eval-finetuned-merged`,
+and `compare-models` wrap these.
+
+**Outputs** (`reports/figures/`, git-ignored): `finetuned_predictions.jsonl`,
+`finetuned_results.json`, `finetuned_metrics_by_task.json`,
+`comparison_results.json`, `metric_delta_by_task.json`,
+`comparison_summary.json`, `qualitative_comparisons.jsonl`, optional PNG charts —
+plus the committed [reports/benchmark_report.md](reports/benchmark_report.md).
+The report has an executive summary, overall + per-task delta tables, best
+improvements, regressions, side-by-side qualitative examples, and the disclaimer.
 
 ## Evaluation plan
 

@@ -87,6 +87,67 @@ should be read as a *reference point*, not ground truth.
 - **RAG baseline** as a third column in the main comparison.
 - **Qualitative report** and **before/after charts** in `reports/figures/`.
 
+## Fine-tuned evaluation & comparison (Phase 6)
+
+### Workflow
+
+1. Run the baseline (Phase 4) → `reports/figures/baseline_{results.json,predictions.jsonl}`.
+2. Run the fine-tuned model on the **same** test set with `run_finetuned_eval.py`
+   → `finetuned_*` files.
+3. Compare → `comparison_results.json`, `metric_delta_by_task.json`,
+   `comparison_summary.json`, `qualitative_comparisons.jsonl`, charts, and
+   `reports/benchmark_report.md`.
+
+`run_finetuned_eval.py` does steps 2–3 in one shot; `compare_models.py` does
+step 3 alone from existing outputs.
+
+### Adapter vs merged evaluation
+
+- **adapter** — loads the base model + LoRA adapter via PEFT
+  (`--model-id` + `--adapter-path`); 4-bit supported. Cheapest to keep around.
+- **merged** — loads a standalone merged model (`--merged-model-path`); simplest
+  to serve (Phase 7) and slightly faster at inference.
+
+Both produce identical output schemas, so the comparison code is backend-agnostic.
+
+### Why the same test set is required
+
+The headline result is a **delta**. If the base and fine-tuned models see
+different examples, prompts, or metrics, the delta is meaningless. The CLI
+re-runs the fine-tuned model over the exact `--test-file` and reuses the Phase 4
+metric functions, and the comparison joins predictions **by example id**.
+
+### How comparison metrics are computed
+
+For every overall and per-task metric: `absolute_delta = finetuned − baseline`,
+`relative_delta_pct = absolute_delta / |baseline| × 100`, and `improved =
+absolute_delta > 0`. Non-finite values are coerced to `0.0`; metrics present on
+only one side are compared against `0.0` and recorded in `warnings`.
+
+### How qualitative examples are selected
+
+Predictions are joined by id; `find_best_improvements` / `find_regressions` rank
+the joined rows by a metric's per-example delta (default `token_f1`). The report
+shows the top side-by-side examples (reference vs base vs fine-tuned).
+
+### Improvement vs regression
+
+An **improvement** is a positive delta on an overall metric; a **regression** is
+a negative one. Both are reported — never hide regressions.
+
+### Known limitations
+
+- Phase 3 reference targets are **template/extractive weak supervision**.
+- `lexical_faithfulness` is lexical overlap, **not** true NLI faithfulness.
+- **Mock mode is not real performance** — it only validates the pipeline.
+- Small test sets can mislead; treat single-run deltas with caution.
+
+### Future improvements
+
+- NLI-based faithfulness model; LLM-as-judge with an explicit rubric.
+- Human evaluation and citation precision.
+- Bootstrap confidence intervals on the deltas.
+
 ## Honesty
 
 Report regressions as well as gains. Verify numbers against the raw result files

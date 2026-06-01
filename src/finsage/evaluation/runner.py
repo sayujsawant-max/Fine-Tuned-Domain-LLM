@@ -100,7 +100,7 @@ class EvalRunner:
                 }
             )
             if index % self.save_every == 0:
-                self.save_predictions(rows, self.output_dir / "baseline_predictions.jsonl")
+                self.save_predictions(rows, self.output_dir / "_partial_predictions.jsonl")
                 logger.info("Checkpointed %d/%d predictions", index, len(examples))
         return rows
 
@@ -136,11 +136,18 @@ class EvalRunner:
         out_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
         return out_path
 
-    def run(self, test_file: Path | str, max_examples: int | None = None) -> dict[str, Any]:
-        """Run the full evaluation and write all baseline outputs.
+    def run_with_prefix(
+        self,
+        test_file: Path | str,
+        output_prefix: str,
+        max_examples: int | None = None,
+    ) -> dict[str, Any]:
+        """Run evaluation and write ``{prefix}_*`` output files.
 
         Args:
             test_file: Path to the JSONL test set.
+            output_prefix: Output file-name prefix (e.g. ``"baseline"`` or
+                ``"finetuned"``).
             max_examples: Optional cap on the number of examples.
 
         Returns:
@@ -159,10 +166,12 @@ class EvalRunner:
             **aggregate,
         }
 
-        preds_path = self.save_predictions(rows, self.output_dir / "baseline_predictions.jsonl")
-        results_path = self.save_metrics(results, self.output_dir / "baseline_results.json")
+        preds_path = self.save_predictions(
+            rows, self.output_dir / f"{output_prefix}_predictions.jsonl"
+        )
+        results_path = self.save_metrics(results, self.output_dir / f"{output_prefix}_results.json")
         by_task_path = self.save_metrics(
-            aggregate["by_task"], self.output_dir / "baseline_metrics_by_task.json"
+            aggregate["by_task"], self.output_dir / f"{output_prefix}_metrics_by_task.json"
         )
 
         results["paths"] = {
@@ -170,5 +179,17 @@ class EvalRunner:
             "results": str(results_path),
             "metrics_by_task": str(by_task_path),
         }
-        logger.info("Baseline evaluation complete: %d example(s)", len(rows))
+        logger.info("%s evaluation complete: %d example(s)", output_prefix, len(rows))
         return results
+
+    def run(self, test_file: Path | str, max_examples: int | None = None) -> dict[str, Any]:
+        """Run the full evaluation and write all baseline outputs.
+
+        Args:
+            test_file: Path to the JSONL test set.
+            max_examples: Optional cap on the number of examples.
+
+        Returns:
+            The aggregated results dict (see :meth:`run_with_prefix`).
+        """
+        return self.run_with_prefix(test_file, "baseline", max_examples=max_examples)

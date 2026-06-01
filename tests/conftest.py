@@ -59,6 +59,30 @@ def validation_sample_file() -> Path:
 
 
 @pytest.fixture
+def baseline_results_file() -> Path:
+    """Return the path to the sample baseline results fixture."""
+    return FIXTURES_DIR / "baseline_results_sample.json"
+
+
+@pytest.fixture
+def baseline_predictions_file() -> Path:
+    """Return the path to the sample baseline predictions fixture."""
+    return FIXTURES_DIR / "baseline_predictions_sample.jsonl"
+
+
+@pytest.fixture
+def finetuned_results_file() -> Path:
+    """Return the path to the sample fine-tuned results fixture."""
+    return FIXTURES_DIR / "finetuned_results_sample.json"
+
+
+@pytest.fixture
+def finetuned_predictions_file() -> Path:
+    """Return the path to the sample fine-tuned predictions fixture."""
+    return FIXTURES_DIR / "finetuned_predictions_sample.jsonl"
+
+
+@pytest.fixture
 def mock_transport() -> httpx.MockTransport:
     """Return a MockTransport routing SEC URLs to local fixtures."""
     tickers = _load_fixture("company_tickers_sample.json")

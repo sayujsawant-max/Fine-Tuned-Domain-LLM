@@ -4,7 +4,8 @@ PYTHON ?= python
 .PHONY: help install install-dev install-ml install-training install-serving \
         lint format typecheck test check download-data extract-sections \
         build-dataset validate-dataset train-dry-run train merge-adapter \
-        eval-baseline eval-baseline-real eval-finetuned serve-api serve-vllm \
+        eval-baseline eval-baseline-real eval-finetuned eval-finetuned-adapter \
+        eval-finetuned-merged compare-models serve-api serve-vllm \
         docker-build docker-up report
 
 help: ## Show this help
@@ -87,11 +88,19 @@ eval-baseline: ## Baseline eval with the mock backend (no model download)
 eval-baseline-real: ## Baseline eval with the real base model (requires ml,training extras + GPU)
 	$(PYTHON) evaluation/run_baseline_eval.py --test-file data/datasets/test.jsonl --output-dir reports/figures --backend transformers --model-id mistralai/Mistral-7B-Instruct-v0.3 --max-examples 200 --device auto --load-in-4bit
 
-eval-finetuned: ## Evaluate the fine-tuned model (Phase 7, requires ml extras)
-	$(PYTHON) evaluation/run_finetuned_eval.py
+eval-finetuned: ## Fine-tuned eval with the mock backend (no model download)
+	$(PYTHON) evaluation/run_finetuned_eval.py --test-file data/datasets/test.jsonl --baseline-results reports/figures/baseline_results.json --baseline-predictions reports/figures/baseline_predictions.jsonl --output-dir reports/figures --backend mock --max-examples 50
 
-report: ## Generate the benchmark comparison report
-	$(PYTHON) evaluation/compare_models.py
+eval-finetuned-adapter: ## Fine-tuned eval with base + LoRA adapter (requires ml,training + GPU)
+	$(PYTHON) evaluation/run_finetuned_eval.py --test-file data/datasets/test.jsonl --baseline-results reports/figures/baseline_results.json --baseline-predictions reports/figures/baseline_predictions.jsonl --model-id mistralai/Mistral-7B-Instruct-v0.3 --adapter-path checkpoints/finsage-7b --output-dir reports/figures --backend adapter --device auto --load-in-4bit --max-examples 200
+
+eval-finetuned-merged: ## Fine-tuned eval with the merged model (requires ml,training + GPU)
+	$(PYTHON) evaluation/run_finetuned_eval.py --test-file data/datasets/test.jsonl --baseline-results reports/figures/baseline_results.json --baseline-predictions reports/figures/baseline_predictions.jsonl --merged-model-path checkpoints/finsage-7b-merged --output-dir reports/figures --backend merged --device auto --max-examples 200
+
+compare-models: ## Compare existing baseline/fine-tuned outputs into a benchmark report
+	$(PYTHON) evaluation/compare_models.py --baseline-results reports/figures/baseline_results.json --baseline-predictions reports/figures/baseline_predictions.jsonl --finetuned-results reports/figures/finetuned_results.json --finetuned-predictions reports/figures/finetuned_predictions.jsonl --output-dir reports/figures --report-path reports/benchmark_report.md
+
+report: compare-models ## Alias for compare-models
 
 # ---------------------------------------------------------------------------
 # Serving (Phase 8-9)

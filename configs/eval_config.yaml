@@ -23,6 +23,36 @@ metrics:
     - classification_accuracy
     - lexical_faithfulness
 
+finetuned:
+  backend: mock
+  model_id: mistralai/Mistral-7B-Instruct-v0.3
+  adapter_path: checkpoints/finsage-7b
+  merged_model_path: checkpoints/finsage-7b-merged
+  test_file: data/datasets/test.jsonl
+  baseline_results: reports/figures/baseline_results.json
+  baseline_predictions: reports/figures/baseline_predictions.jsonl
+  output_dir: reports/figures
+  max_examples: 200
+  batch_size: 1
+  max_new_tokens: 256
+  temperature: 0.0
+  top_p: 1.0
+  device: auto
+  load_in_4bit: true
+  generate_report: true
+  generate_charts: true
+  export_pdf: false
+
+comparison:
+  primary_metrics:
+    - token_f1
+    - rouge_l
+    - numeric_exact_match
+    - classification_accuracy
+    - lexical_faithfulness
+  qualitative_examples: 5
+  regression_examples: 5
+
 models:
   base:
     name: base-mistral-7b

@@ -53,6 +53,7 @@ ml = [
     "rouge-score>=0.1.2",
     "bert-score>=0.3.13",
     "scikit-learn>=1.4",
+    "matplotlib>=3.8",
     "spacy>=3.7",
     "datasketch>=1.6",
 ]

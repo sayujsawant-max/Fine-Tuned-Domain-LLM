@@ -213,3 +213,212 @@ class BaselineReportGenerator:
                 if len(rows) >= limit:
                     break
         return rows
+
+
+def _comparison_table(overall_comparison: dict[str, Any]) -> str:
+    """Render an overall base-vs-fine-tuned comparison table."""
+    if not overall_comparison:
+        return "_No overall comparison available._"
+    lines = [
+        "| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |",
+        "|--------|------|------------|-------|-----|----------|",
+    ]
+    for metric, d in sorted(overall_comparison.items()):
+        mark = "✅" if d["improved"] else ("➖" if d["absolute_delta"] == 0 else "🔻")
+        lines.append(
+            f"| {metric} | {d['baseline']:.4f} | {d['finetuned']:.4f} | "
+            f"{d['absolute_delta']:+.4f} | {d['relative_delta_pct']:+.1f}% | {mark} |"
+        )
+    return "\n".join(lines)
+
+
+class BenchmarkReportGenerator:
+    """Generates the publishable before/after benchmark report (Markdown)."""
+
+    project_name = "FinSage-7B"
+
+    def generate_benchmark_report(
+        self,
+        baseline_results: dict[str, Any],
+        finetuned_results: dict[str, Any],
+        comparison: dict[str, Any],
+        qualitative_examples: list[dict[str, Any]],
+        output_path: Path | str = "reports/benchmark_report.md",
+        chart_paths: dict[str, str] | None = None,
+    ) -> Path:
+        """Render and write the before/after benchmark report.
+
+        Args:
+            baseline_results: Baseline results dict.
+            finetuned_results: Fine-tuned results dict.
+            comparison: Comparison dict from ``ModelComparison.compare_results``.
+            qualitative_examples: Joined qualitative rows.
+            output_path: Destination Markdown path.
+            chart_paths: Optional mapping of chart name -> image path to embed.
+
+        Returns:
+            The path written to.
+        """
+        summary = comparison.get("summary", {})
+        is_mock = (
+            baseline_results.get("backend") == "mock" or finetuned_results.get("backend") == "mock"
+        )
+        lines: list[str] = [f"# {self.project_name} Benchmark Report", ""]
+
+        if is_mock:
+            lines += [
+                "> ⚠️ **Sample/mock numbers are for pipeline validation only and are "
+                "not real benchmark results.** Run the adapter/merged backend on a GPU "
+                "for real figures.",
+                "",
+            ]
+
+        improved = summary.get("metrics_improved", 0)
+        compared = summary.get("metrics_compared", 0)
+        lines += [
+            "## Executive summary",
+            "",
+            f"FinSage-7B (fine-tuned) improved **{improved}/{compared}** overall metrics "
+            f"versus the base model, with a mean absolute delta of "
+            f"**{summary.get('mean_absolute_delta', 0):+.4f}** across metrics.",
+            "",
+            "## Models",
+            "",
+            f"- **Base model:** {baseline_results.get('model_id') or 'mistralai/Mistral-7B-Instruct-v0.3'}",
+            f"- **Fine-tuned backend:** {finetuned_results.get('backend')}",
+            f"- **Fine-tuned model/adapter:** {finetuned_results.get('model_id') or 'see run config'}",
+            "",
+            "## Dataset",
+            "",
+            f"- **Test file:** {finetuned_results.get('test_file', 'n/a')}",
+            f"- **Examples:** {finetuned_results.get('num_examples', 0)} "
+            "(same held-out set as the baseline)",
+            "",
+            "## Task distribution",
+            "",
+            "| Task type | Examples |",
+            "|-----------|----------|",
+        ]
+        for task, count in sorted(finetuned_results.get("count_by_task", {}).items()):
+            lines.append(f"| {task} | {count} |")
+        lines += [
+            "",
+            "## Overall metrics (base vs fine-tuned)",
+            "",
+            _comparison_table(comparison.get("overall_comparison", {})),
+            "",
+        ]
+
+        lines += ["## Metrics by task", ""]
+        for task, metrics in sorted(comparison.get("by_task_comparison", {}).items()):
+            lines += [f"### {task}", "", _comparison_table(metrics), ""]
+
+        lines += ["## Best improvements", ""]
+        improvements = sorted(
+            comparison.get("improvements", {}).items(),
+            key=lambda kv: kv[1]["absolute_delta"],
+            reverse=True,
+        )
+        if improvements:
+            for metric, d in improvements:
+                lines.append(
+                    f"- **{metric}**: {d['baseline']:.4f} → {d['finetuned']:.4f} ({d['absolute_delta']:+.4f})"
+                )
+        else:
+            lines.append("_No overall metric improved._")
+        lines.append("")
+
+        lines += ["## Regressions / failure cases", ""]
+        regressions = comparison.get("regressions", {})
+        if regressions:
+            for metric, d in sorted(regressions.items(), key=lambda kv: kv[1]["absolute_delta"]):
+                lines.append(
+                    f"- **{metric}**: {d['baseline']:.4f} → {d['finetuned']:.4f} ({d['absolute_delta']:+.4f})"
+                )
+        else:
+            lines.append("_No overall metric regressed._")
+        lines.append("")
+
+        lines += ["## Qualitative examples", ""]
+        for ex in qualitative_examples[:5]:
+            lines += [
+                f"**Task:** {ex.get('task_type')} — {ex.get('id')}  ",
+                f"**Instruction:** {self._truncate(ex.get('instruction', ''))}  ",
+                f"**Reference:** {self._truncate(ex.get('reference', ''))}  ",
+                f"**Base model:** {self._truncate(ex.get('baseline_prediction', ''))}  ",
+                f"**FinSage-7B:** {self._truncate(ex.get('finetuned_prediction', ''))}  ",
+                f"**Metric change:** {ex.get('improvement_summary', {})}",
+                "",
+            ]
+
+        if chart_paths:
+            lines += ["## Charts", ""]
+            for name, rel in chart_paths.items():
+                lines.append(f"![{name}]({rel})")
+            lines.append("")
+
+        lines += [
+            "## Faithfulness / hallucination",
+            "",
+            "Faithfulness is currently approximated by `lexical_faithfulness` (lexical "
+            "overlap with the source). A true NLI-based faithfulness metric and citation "
+            "precision are planned (see eval guide).",
+            "",
+            "## Limitations",
+            "",
+            "- Phase 3 reference targets are template/extractive weak supervision.\n"
+            "- `lexical_faithfulness` is a proxy, not entailment.\n"
+            "- Small test sets and mock backends can mislead — read deltas with caution.",
+            "",
+            "## Disclaimer",
+            "",
+            f"> {DISCLAIMER}",
+            "",
+            "## Next steps",
+            "",
+            "- Run the real adapter/merged backend on a GPU for headline numbers.\n"
+            "- Add NLI faithfulness, an LLM-as-judge rubric, and bootstrap confidence intervals.\n"
+            "- Serve the merged model (Phase 7, vLLM).",
+            "",
+        ]
+
+        out_path = Path(output_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+        logger.info("Wrote benchmark report to %s", out_path)
+        return out_path
+
+    @staticmethod
+    def _truncate(text: Any, limit: int = 200) -> str:
+        """Truncate text to ``limit`` characters for the report."""
+        s = str(text).replace("\n", " ")
+        return s if len(s) <= limit else s[:limit] + "…"
+
+    @staticmethod
+    def optionally_export_pdf(markdown_path: Path | str, pdf_path: Path | str) -> Path | None:
+        """Export the Markdown report to PDF via pandoc, if available.
+
+        Args:
+            markdown_path: Path to the Markdown report.
+            pdf_path: Destination PDF path.
+
+        Returns:
+            The PDF path if exported, else ``None`` (pandoc missing or failed).
+        """
+        import shutil
+        import subprocess
+
+        if shutil.which("pandoc") is None:
+            logger.warning("pandoc not found; skipping PDF export.")
+            return None
+        try:
+            subprocess.run(
+                ["pandoc", str(markdown_path), "-o", str(pdf_path)],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.SubprocessError, OSError):
+            logger.warning("pandoc PDF export failed; skipping.")
+            return None
+        logger.info("Exported PDF to %s", pdf_path)
+        return Path(pdf_path)
