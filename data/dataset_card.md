@@ -1,55 +1,79 @@
-# FinSage-7B Instruction Dataset Card
+# FinSage Filing Instruction Dataset
 
-> **Status: scaffold (Phase 1).** The dataset has not been built yet. This card
-> documents the intended design and will be finalised in Phase 4.
+> **Status: Phase 3 (deterministic baseline).** Targets are template/extractive
+> **weak supervision**, not human-written gold answers. Phase 4 will replace them
+> with reviewed / LLM-assisted targets using the same schema and splits.
 
 ## Summary
 
-An instruction-tuning dataset derived from **public SEC EDGAR filings**
-(10-K, 10-Q, 8-K) for adapting a 7B LLM to financial-filing analysis.
+An instruction-tuning dataset for financial-filing analysis, generated from
+**public SEC EDGAR filings** processed in Phase 2 (10-K / 10-Q sections). Built
+deterministically with no LLM/GPT/Claude APIs.
 
-## Sources
+## Data source
 
-- **Training/eval source:** SEC EDGAR (public filings only).
-- **Evaluation-only references:** FinQA, TAT-QA (never used for training).
-- No private, proprietary, or insider information is used.
+SEC EDGAR public filings only (see [dataset_guide.md](../docs/dataset_guide.md)).
+No private, proprietary, or insider data. Evaluation-only datasets (FinQA,
+TAT-QA) are never mixed into training.
 
-## Sections covered
+## Intended use
 
-Risk Factors (Item 1A), MD&A (Item 7), Financial Statements (Item 8),
-Market Risk (Item 7A), Business (Item 1).
+- Supervised fine-tuning experiments for filing analysis (QLoRA, Phase 6).
+- A reproducible baseline to measure later target-quality improvements against.
+- Research and educational use.
 
-## Schema (JSONL)
+## Not intended use
 
-```json
-{
-  "id": "AAPL-2022-10-K-RISK_SUMMARY-0042",
-  "source": "AAPL 2022 10-K Risk Factors",
-  "instruction": "Summarize the top three risk factors disclosed in this filing excerpt.",
-  "input": "Filing excerpt text ...",
-  "output": "The company discloses three key risks: ...",
-  "task_type": "risk_summary",
-  "metadata": {"ticker": "AAPL", "year": 2022, "filing_type": "10-K", "section": "Risk Factors"}
-}
-```
+- **Not** investment advice or a basis for financial decisions.
+- **Not** a source of verified financial facts — outputs are weakly supervised.
+- Not for production deployment without human-reviewed targets and evaluation.
 
 ## Task types (10)
 
 `risk_summary`, `mda_explanation`, `metric_extraction`, `yoy_comparison`,
 `business_risk_identification`, `revenue_driver_explanation`, `filing_qa`,
-`analyst_summary`, `outlook_classification`, `hallucination_detection`.
+`analyst_summary`, `outlook_classification`, `hallucination_detection`. Task
+types are selected per section (see the dataset guide).
 
-## Splits (no leakage)
+## Schema (JSONL)
 
-Splits are made **by company and year**, not by random example:
+```json
+{
+  "id": "AAPL-2022-10-K-000108-mda-0-yoy_comparison",
+  "instruction": "...",
+  "input": "filing excerpt ...",
+  "output": "template/extractive target ...",
+  "task_type": "yoy_comparison",
+  "source": "AAPL 2022 10-K mda",
+  "split": "train",
+  "metadata": {"ticker": "AAPL", "cik": "0000320193", "form": "10-K",
+               "section": "mda", "year": "2022", "chunk_id": 0,
+               "generation_method": "template_extractive", "weak_supervision": true}
+}
+```
 
-| Split | Target size | Policy |
-|-------|-------------|--------|
-| train | 8,000–12,000 | e.g. 2018–2022 filings |
-| validation | ~600 | held-out companies |
-| test | 200–300 | e.g. 2023 filings + fully held-out companies |
+## Splits
 
-## Licensing & disclaimer
+`train.jsonl`, `validation.jsonl`, `test.jsonl` (+ `dataset_stats.json`,
+`dataset_manifest.jsonl`). Target sizes for the full corpus: ~8k–12k train,
+~600 validation, ~200–300 test.
 
-Built from public-domain U.S. government filings. **Not financial advice.**
-Always verify against the original filings.
+## Leakage prevention
+
+Default **`company_holdout`** assigns whole companies to a single split, so **no
+company appears in both train and test**. A `time_holdout` (latest years → test)
+strategy is also available. A validator enforces no duplicate ids and no
+train/test company overlap.
+
+## Known limitations
+
+- Targets are template/extractive weak supervision (see above).
+- Extraction is regex/keyword-based and can produce false positives/negatives.
+- Outlook labels use naive keyword counting.
+- Section extraction quality (Phase 2) bounds dataset quality.
+
+## ⚠️ Financial disclaimer — no investment advice
+
+This dataset and any model trained on it are **not** financial, legal, or
+investment advice and produce **no investment recommendations**. Built from
+public filings only; always verify against the original source documents.

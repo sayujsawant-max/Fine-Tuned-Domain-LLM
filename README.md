@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 2 — SEC EDGAR ingestion & preprocessing ✅** (lightweight, CPU-friendly, no GPU or model downloads required)
+**Current status: Phase 3 — Instruction dataset generation ✅** (deterministic, CPU-friendly, no GPU/model/network required)
 
 ---
 
@@ -47,8 +47,8 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 |------:|-------------|--------|
 | 1 | Project scaffold, configs, API stubs, tests, tooling | ✅ Done |
 | 2 | SEC EDGAR ingestion + section preprocessing | ✅ Done |
-| 3 | Chunking + dataset-ready cleaning | ⏳ Planned |
-| 4 | Instruction dataset generation (JSONL) | ⏳ Planned |
+| 3 | Chunking + instruction dataset generation (JSONL) | ✅ Done |
+| 4 | Dataset quality pass (LLM/human-reviewed targets) | ⏳ Planned |
 | 5 | Baseline evaluation (base Mistral-7B) | ⏳ Planned |
 | 6 | QLoRA fine-tuning | ⏳ Planned |
 | 7 | Fine-tuned evaluation + benchmark report | ⏳ Planned |
@@ -151,6 +151,67 @@ Extracted sections: `business`, `risk_factors`, `mda`, `market_risk`,
 > errors, and caches metadata. Use **public filings only**, and **do not commit
 > raw/processed SEC data** — `data/raw/`, `data/processed/`, and `data/cache/`
 > are git-ignored. See [docs/dataset_guide.md](docs/dataset_guide.md).
+
+## Instruction dataset (Phase 3)
+
+Turn processed sections into a validated, leakage-safe JSONL instruction
+dataset. Deterministic and CPU-only — **Phase 3 uses no LLM/GPT/Claude APIs.**
+
+> ⚠️ **Phase 3 outputs are template/extractive weak-supervision targets**, not
+> human-written gold answers. Every example is flagged in its metadata
+> (`generation_method: template_extractive`, `weak_supervision: true`). Phase 4
+> replaces these with reviewed / LLM-assisted targets.
+
+**The 10 task types:** `risk_summary`, `mda_explanation`, `metric_extraction`,
+`yoy_comparison`, `business_risk_identification`, `revenue_driver_explanation`,
+`filing_qa`, `analyst_summary`, `outlook_classification`,
+`hallucination_detection`. Task types are chosen per section.
+
+**Build:**
+
+```bash
+python scripts/build_instruction_dataset.py build \
+  --processed-manifest-path data/processed/sec/manifest.jsonl \
+  --output-dir data/datasets \
+  --split-strategy company_holdout \
+  --max-examples 10000
+```
+
+**Validate:**
+
+```bash
+python scripts/validate_dataset.py validate \
+  --train-path data/datasets/train.jsonl \
+  --validation-path data/datasets/validation.jsonl \
+  --test-path data/datasets/test.jsonl \
+  --report-path data/datasets/validation_report.json
+```
+
+`make build-dataset` / `make validate-dataset` run the same with defaults.
+
+**Outputs:** `train.jsonl`, `validation.jsonl`, `test.jsonl`,
+`dataset_stats.json`, `dataset_manifest.jsonl` (all under `data/datasets/`,
+git-ignored).
+
+**Example JSONL row:**
+
+```json
+{
+  "id": "AAPL-2022-10-K-000108-mda-0-yoy_comparison",
+  "instruction": "Identify any year-over-year comparison or period-over-period change mentioned in the filing excerpt.",
+  "input": "Net revenue for fiscal 2022 was $394,328 million, an increase of 8% compared with the prior year. ...",
+  "output": "- Net revenue for fiscal 2022 was $394,328 million, an increase of 8% compared with the prior year.",
+  "task_type": "yoy_comparison",
+  "source": "AAPL 2022 10-K mda",
+  "metadata": {"ticker": "AAPL", "year": "2022", "form": "10-K", "section": "mda",
+               "generation_method": "template_extractive", "weak_supervision": true}
+}
+```
+
+**Leakage-safe splits (`company_holdout`).** Whole companies are assigned to
+train/validation/test so **no ticker appears in both train and test**. A
+`time_holdout` strategy (latest filing years → test) is also available. The
+validator enforces no duplicate ids and no train/test company overlap.
 
 ## Dataset strategy
 

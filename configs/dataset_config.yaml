@@ -1,0 +1,36 @@
+# Instruction dataset build configuration (Phase 3).
+dataset:
+  processed_manifest_path: data/processed/sec/manifest.jsonl
+  output_dir: data/datasets
+  max_examples: 10000
+  random_seed: 42
+
+chunking:
+  max_tokens: 512
+  overlap: 64
+  min_tokens: 80
+
+splitting:
+  strategy: company_holdout
+  train_ratio: 0.85
+  validation_ratio: 0.10
+  test_ratio: 0.05
+
+task_types:
+  - risk_summary
+  - mda_explanation
+  - metric_extraction
+  - yoy_comparison
+  - business_risk_identification
+  - revenue_driver_explanation
+  - filing_qa
+  - analyst_summary
+  - outlook_classification
+  - hallucination_detection
+
+quality:
+  require_all_task_types: true
+  allow_template_outputs: true
+  min_input_chars: 100
+  min_output_chars: 10
+  prevent_company_leakage: true

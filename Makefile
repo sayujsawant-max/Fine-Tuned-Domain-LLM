@@ -44,7 +44,14 @@ typecheck: ## Run mypy static type checks
 test: ## Run the test suite
 	$(PYTHON) -m pytest
 
-check: lint typecheck test ## Run lint + typecheck + tests
+check: lint typecheck test ## Run lint + typecheck + tests (+ dataset validation if built)
+	@if [ -f data/datasets/train.jsonl ]; then \
+		$(PYTHON) scripts/validate_dataset.py validate \
+			--train-path data/datasets/train.jsonl \
+			--validation-path data/datasets/validation.jsonl \
+			--test-path data/datasets/test.jsonl \
+			--report-path data/datasets/validation_report.json; \
+	else echo "No dataset built; skipping dataset validation."; fi
 
 # ---------------------------------------------------------------------------
 # Data pipeline (Phase 2-4)
@@ -55,11 +62,11 @@ download-data: ## Download a small set of SEC EDGAR filings
 extract-sections: ## Extract sections from downloaded filings into clean text
 	$(PYTHON) scripts/extract_sections.py extract --manifest-path data/raw/sec/manifest.jsonl --output-dir data/processed/sec --processed-manifest-path data/processed/sec/manifest.jsonl
 
-build-dataset: ## Build the JSONL instruction dataset (placeholder)
-	$(PYTHON) scripts/build_instruction_dataset.py run
+build-dataset: ## Build the JSONL instruction dataset
+	$(PYTHON) scripts/build_instruction_dataset.py build --processed-manifest-path data/processed/sec/manifest.jsonl --output-dir data/datasets --split-strategy company_holdout
 
-validate-dataset: ## Validate the instruction dataset (placeholder)
-	$(PYTHON) scripts/validate_dataset.py run
+validate-dataset: ## Validate the instruction dataset splits
+	$(PYTHON) scripts/validate_dataset.py validate --train-path data/datasets/train.jsonl --validation-path data/datasets/validation.jsonl --test-path data/datasets/test.jsonl --report-path data/datasets/validation_report.json
 
 # ---------------------------------------------------------------------------
 # Training & evaluation (Phase 5-7)

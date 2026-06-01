@@ -1,91 +1,79 @@
-"""CLI to validate the instruction dataset (Phase 4).
+"""CLI to validate the instruction dataset (Phase 3).
 
-Checks each JSONL record carries the required fields and a known task type, and
-reports per-split counts. Implemented enough to be useful as soon as datasets
-exist; gracefully reports when they do not.
+Validates the train/validation/test JSONL files, checks duplicate ids and
+train/test company leakage, verifies task-type coverage, writes a report, and
+exits non-zero on failure.
+
+Example::
+
+    python scripts/validate_dataset.py validate \\
+        --train-path data/datasets/train.jsonl \\
+        --validation-path data/datasets/validation.jsonl \\
+        --test-path data/datasets/test.jsonl \\
+        --report-path data/datasets/validation_report.json
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import typer
+from rich.console import Console
 
 from finsage.config import get_settings
-from finsage.data.instruction_builder import TASK_TYPES
+from finsage.data.dataset_validator import DatasetValidator
 from finsage.logging_utils import get_logger, setup_logging
 
 app = typer.Typer(help="Validate the instruction dataset.", add_completion=False)
 logger = get_logger(__name__)
-
-REQUIRED_FIELDS: tuple[str, ...] = (
-    "id",
-    "instruction",
-    "input",
-    "output",
-    "task_type",
-    "metadata",
-)
+console = Console()
 
 
-def validate_record(record: dict[str, object]) -> list[str]:
-    """Validate a single dataset record.
-
-    Args:
-        record: A parsed JSONL record.
-
-    Returns:
-        A list of human-readable error strings; empty if the record is valid.
-    """
-    errors: list[str] = []
-    for field_name in REQUIRED_FIELDS:
-        if field_name not in record:
-            errors.append(f"missing field '{field_name}'")
-    task_type = record.get("task_type")
-    if task_type is not None and task_type not in TASK_TYPES:
-        errors.append(f"unknown task_type '{task_type}'")
-    return errors
+@app.callback()
+def _main() -> None:
+    """Instruction dataset validator (use the ``validate`` subcommand)."""
 
 
 @app.command()
-def run(
-    dataset_dir: str = typer.Option("data/datasets", help="Dataset directory."),
+def validate(
+    train_path: str = typer.Option("data/datasets/train.jsonl", help="Train JSONL path."),
+    validation_path: str = typer.Option(
+        "data/datasets/validation.jsonl", help="Validation JSONL path."
+    ),
+    test_path: str = typer.Option("data/datasets/test.jsonl", help="Test JSONL path."),
+    report_path: str = typer.Option(
+        "data/datasets/validation_report.json", help="Validation report output path."
+    ),
 ) -> None:
-    """Validate all ``*.jsonl`` files in ``dataset_dir``.
+    """Validate the dataset splits and write a report.
 
     Args:
-        dataset_dir: Directory containing the JSONL splits.
+        train_path: Path to ``train.jsonl``.
+        validation_path: Path to ``validation.jsonl``.
+        test_path: Path to ``test.jsonl``.
+        report_path: Destination path for the JSON report.
 
     Raises:
-        typer.Exit: With code 1 if any record fails validation.
+        typer.Exit: With code 1 if validation fails.
     """
     setup_logging(get_settings().log_level)
-    directory = Path(dataset_dir)
-    files = sorted(directory.glob("*.jsonl")) if directory.exists() else []
-    if not files:
-        logger.warning("No JSONL files found in %s (build the dataset first).", dataset_dir)
-        return
+    validator = DatasetValidator()
+    report = validator.validate_splits(train_path, validation_path, test_path)
+    validator.write_validation_report(report, report_path)
 
-    total_errors = 0
-    for path in files:
-        count = 0
-        with path.open("r", encoding="utf-8") as fh:
-            for line_no, line in enumerate(fh, start=1):
-                line = line.strip()
-                if not line:
-                    continue
-                count += 1
-                record = json.loads(line)
-                for err in validate_record(record):
-                    total_errors += 1
-                    logger.error("%s:%d %s", path.name, line_no, err)
-        logger.info("%s: %d records checked", path.name, count)
+    for name, file_report in report["files"].items():
+        console.print(
+            f"  {name}: {file_report['valid_examples']}/{file_report['total_examples']} valid"
+        )
+    console.print(f"Duplicate ids across splits: {len(report['duplicate_ids'])}")
+    console.print(f"Train/test company overlap: {report['train_test_ticker_overlap']}")
+    console.print(f"Task types present: {report['task_types_present']}")
+    if report["task_types_missing"]:
+        console.print(f"[yellow]Task types missing: {report['task_types_missing']}[/yellow]")
 
-    if total_errors:
-        logger.error("Validation failed with %d error(s)", total_errors)
+    if report["passed"]:
+        console.print("[green]Validation PASSED[/green]")
+    else:
+        console.print("[red]Validation FAILED[/red]")
         raise typer.Exit(code=1)
-    logger.info("All records valid")
 
 
 if __name__ == "__main__":

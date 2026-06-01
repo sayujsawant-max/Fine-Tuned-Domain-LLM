@@ -35,6 +35,12 @@ def sample_10k_html() -> str:
 
 
 @pytest.fixture
+def processed_manifest_path() -> Path:
+    """Return the path to the sample processed manifest fixture."""
+    return FIXTURES_DIR / "processed_manifest_sample.jsonl"
+
+
+@pytest.fixture
 def mock_transport() -> httpx.MockTransport:
     """Return a MockTransport routing SEC URLs to local fixtures."""
     tickers = _load_fixture("company_tickers_sample.json")
