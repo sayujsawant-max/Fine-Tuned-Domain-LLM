@@ -36,6 +36,26 @@ _NUMERIC_RE = re.compile(
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
+def _quantization_config() -> Any:
+    """Build a 4-bit NF4 ``BitsAndBytesConfig`` (lazy import).
+
+    Modern transformers removed the ``load_in_4bit=True`` ``from_pretrained``
+    kwarg in favour of an explicit ``quantization_config``; this builds it.
+
+    Returns:
+        A ``transformers.BitsAndBytesConfig`` for 4-bit NF4 loading.
+    """
+    import torch
+    from transformers import BitsAndBytesConfig
+
+    return BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+    )
+
+
 class BaseGenerator(ABC):
     """Abstract base class for prediction generators."""
 
@@ -198,7 +218,7 @@ class TransformersGenerator(BaseGenerator):
         if dtype is not None:
             kwargs["torch_dtype"] = dtype
         if self.load_in_4bit:
-            kwargs["load_in_4bit"] = True
+            kwargs["quantization_config"] = _quantization_config()
 
         logger.info("Loading tokenizer and model for %s", self.model_id)
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -334,7 +354,7 @@ class AdapterGenerator(TransformersGenerator):
         if dtype is not None:
             kwargs["torch_dtype"] = dtype
         if self.load_in_4bit:
-            kwargs["load_in_4bit"] = True
+            kwargs["quantization_config"] = _quantization_config()
 
         logger.info("Loading base %s + adapter %s", self.model_id, self.adapter_path)
         base = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)

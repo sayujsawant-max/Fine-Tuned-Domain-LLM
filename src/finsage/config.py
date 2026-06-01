@@ -97,6 +97,8 @@ class Settings(BaseSettings):
         alias="CORS_ALLOWED_ORIGINS",
     )
     rate_limit_requests_per_minute: int = Field(default=60, alias="RATE_LIMIT_REQUESTS_PER_MINUTE")
+    rate_limit_backend: str = Field(default="memory", alias="RATE_LIMIT_BACKEND")
+    redis_url: str | None = Field(default=None, alias="REDIS_URL")
     disclaimer_enabled: bool = Field(default=True, alias="DISCLAIMER_ENABLED")
     log_request_body: bool = Field(default=False, alias="LOG_REQUEST_BODY")
 
@@ -118,6 +120,18 @@ class Settings(BaseSettings):
             The configured allowed origins, comma-separated values trimmed.
         """
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def api_secret_keys(self) -> list[str]:
+        """Return all configured API keys (``API_SECRET_KEY`` is comma-separated).
+
+        Supports rotating or issuing multiple keys without code changes, e.g.
+        ``API_SECRET_KEY=key-a,key-b``.
+
+        Returns:
+            The non-empty, trimmed keys; empty when only blanks are configured.
+        """
+        return [key.strip() for key in self.api_secret_key.split(",") if key.strip()]
 
     @property
     def is_production(self) -> bool:

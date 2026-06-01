@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse, Response
 
 from finsage.logging_utils import get_logger
 from finsage.serving.auth import get_api_key_from_headers, is_public_path
-from finsage.serving.rate_limiter import InMemoryRateLimiter
+from finsage.serving.rate_limiter import InMemoryRateLimiter, RateLimiter
 
 logger = get_logger(__name__)
 
@@ -136,14 +136,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         fallback_limiter: Limiter used when the app has none configured.
     """
 
-    def __init__(self, app: Callable, fallback_limiter: InMemoryRateLimiter | None = None) -> None:
+    def __init__(self, app: Callable, fallback_limiter: RateLimiter | None = None) -> None:
         super().__init__(app)
-        self._fallback = fallback_limiter or InMemoryRateLimiter()
+        self._fallback: RateLimiter = fallback_limiter or InMemoryRateLimiter()
 
-    def _limiter(self, request: Request) -> InMemoryRateLimiter:
-        """Return the active limiter for this request."""
+    def _limiter(self, request: Request) -> RateLimiter:
+        """Return the active limiter for this request (any RateLimiter backend)."""
         limiter = getattr(request.app.state, "rate_limiter", None)
-        return limiter if isinstance(limiter, InMemoryRateLimiter) else self._fallback
+        return limiter if isinstance(limiter, RateLimiter) else self._fallback
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Allow or reject a request based on the per-client budget.

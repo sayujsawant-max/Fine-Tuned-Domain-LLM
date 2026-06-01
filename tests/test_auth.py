@@ -48,6 +48,15 @@ def test_verify_missing_key_fails():
     assert verify_api_key(None, None) is False
 
 
+def test_verify_against_multiple_keys():
+    """A provided key matching any configured key verifies true."""
+    keys = ["key-a", "key-b", "key-c"]
+    assert verify_api_key("key-b", keys) is True
+    assert verify_api_key("key-a", keys) is True
+    assert verify_api_key("unknown", keys) is False
+    assert verify_api_key("key-b", []) is False
+
+
 def test_public_path_detection():
     """Health and docs paths are public; API paths are protected."""
     assert is_public_path("/v1/health") is True

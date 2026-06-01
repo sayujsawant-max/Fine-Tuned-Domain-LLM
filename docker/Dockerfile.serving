@@ -4,14 +4,20 @@
 #   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up
 #   (or `docker run --gpus all ...`)
 #
-# vLLM is tightly coupled to specific CUDA/torch versions. This image pins a
-# CUDA 12.1 runtime base; if `pip install vllm` resolves a wheel built for a
-# different CUDA, either switch the base tag to match (e.g. cuda:12.4.x) or use
-# the official `vllm/vllm-openai:latest` image and mount the merged model.
+# vLLM is tightly coupled to specific CUDA/torch versions. The CUDA base image
+# is parameterised via the CUDA_IMAGE build arg so you can match the wheel that
+# `pip install vllm` resolves WITHOUT editing this file:
+#
+#   docker build -f docker/Dockerfile.serving \
+#     --build-arg CUDA_IMAGE=nvidia/cuda:12.4.1-runtime-ubuntu22.04 -t finsage-vllm .
+#
+# Or set it per-service in compose via `build.args`. Alternatively use the
+# official `vllm/vllm-openai:latest` image and mount the merged model.
 #
 # No secrets are baked in. The merged model is MOUNTED at runtime (read-only)
 # and MODEL_PATH points at it (see docker-compose.yml).
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+ARG CUDA_IMAGE=nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM ${CUDA_IMAGE}
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

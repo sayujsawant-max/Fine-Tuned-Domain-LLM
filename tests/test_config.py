@@ -32,6 +32,19 @@ def test_settings_reads_env(monkeypatch):
     assert settings.vllm_base_url == "http://localhost:9001/v1"
 
 
+def test_api_secret_keys_splits_comma(monkeypatch):
+    """API_SECRET_KEY supports multiple comma-separated keys."""
+    monkeypatch.setenv("API_SECRET_KEY", "key-a, key-b ,key-c")
+    settings = Settings(_env_file=None)
+    assert settings.api_secret_keys == ["key-a", "key-b", "key-c"]
+
+
+def test_api_secret_keys_single(monkeypatch):
+    """A single key yields a one-element list."""
+    monkeypatch.setenv("API_SECRET_KEY", "only-one")
+    assert Settings(_env_file=None).api_secret_keys == ["only-one"]
+
+
 def test_get_settings_is_cached():
     """get_settings should return the same cached instance."""
     assert get_settings() is get_settings()

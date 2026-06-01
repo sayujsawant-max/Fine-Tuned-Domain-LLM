@@ -9,7 +9,7 @@ Keys may be supplied via the ``X-API-Key`` header or an
 from __future__ import annotations
 
 import secrets
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from fastapi import Request
 
@@ -63,25 +63,34 @@ def get_api_key_from_headers(headers: Mapping[str, str]) -> str | None:
     return None
 
 
-def verify_api_key(provided_key: str | None, expected_key: str | None) -> bool:
-    """Securely compare a provided key against the expected key.
+def verify_api_key(provided_key: str | None, expected_key: str | Iterable[str] | None) -> bool:
+    """Securely compare a provided key against one or more expected keys.
+
+    Accepts either a single expected key or an iterable of keys (to support key
+    rotation / multiple issued keys). Comparison is constant-time per candidate.
 
     Args:
         provided_key: The key supplied by the client, if any.
-        expected_key: The configured server secret, if any.
+        expected_key: The configured server secret(s), if any.
 
     Returns:
-        ``True`` if both keys are present and equal (constant-time compare).
+        ``True`` if ``provided_key`` matches any non-empty expected key.
     """
-    if not provided_key or not expected_key:
+    if not provided_key or expected_key is None:
         return False
-    return secrets.compare_digest(provided_key, expected_key)
+    candidates = [expected_key] if isinstance(expected_key, str) else list(expected_key)
+    # Evaluate every candidate (no early return) to avoid leaking which matched
+    # via timing; compare_digest itself is constant-time per comparison.
+    matched = False
+    for candidate in candidates:
+        if candidate and secrets.compare_digest(provided_key, candidate):
+            matched = True
+    return matched
 
 
 def _secret_is_configured(settings: Settings) -> bool:
-    """Return whether a real (non-placeholder) secret is configured."""
-    key = settings.api_secret_key
-    return bool(key) and key != PLACEHOLDER_KEY
+    """Return whether at least one real (non-placeholder) key is configured."""
+    return any(key != PLACEHOLDER_KEY for key in settings.api_secret_keys)
 
 
 async def require_api_key(request: Request) -> str | None:
@@ -120,6 +129,6 @@ async def require_api_key(request: Request) -> str | None:
 
     if not provided:
         raise AuthenticationError("Missing API key. Supply X-API-Key or Authorization: Bearer.")
-    if not verify_api_key(provided, settings.api_secret_key):
+    if not verify_api_key(provided, settings.api_secret_keys):
         raise AuthenticationError("Invalid API key.")
     return provided

@@ -206,21 +206,43 @@ def load_jsonl_dataset(train_file: Path | str, validation_file: Path | str) -> A
 
 
 def build_training_args(config: dict[str, Any]) -> Any:
-    """Build ``transformers.TrainingArguments`` from the training config.
+    """Build training arguments from the config.
+
+    Prefers TRL's ``SFTConfig`` (a ``TrainingArguments`` subclass) so that
+    SFT-specific fields (``max_seq_length``, ``packing``, ``dataset_text_field``)
+    are carried in a version-correct way; falls back to plain
+    ``transformers.TrainingArguments`` when TRL is unavailable. Only fields that
+    the installed class actually accepts are passed, so this is robust across
+    TRL/transformers versions.
 
     Args:
-        config: The full training config dict (uses the ``training`` section).
+        config: The full training config dict (uses ``training`` + ``sft``).
 
     Returns:
-        A configured ``TrainingArguments`` instance.
+        An ``SFTConfig`` (modern TRL) or ``TrainingArguments`` instance.
 
     Raises:
         ImportError: If transformers is not installed.
     """
     _require("transformers")
-    from transformers import TrainingArguments
+    import inspect
 
-    return TrainingArguments(**dict(config.get("training", {})))
+    training = dict(config.get("training", {}))
+    sft = dict(config.get("sft", {}))
+
+    try:
+        from trl import SFTConfig
+
+        params = inspect.signature(SFTConfig.__init__).parameters
+        kwargs = dict(training)
+        for field in ("max_seq_length", "packing", "dataset_text_field"):
+            if field in params and field in sft:
+                kwargs[field] = sft[field]
+        return SFTConfig(**kwargs)
+    except ImportError:
+        from transformers import TrainingArguments
+
+        return TrainingArguments(**training)
 
 
 def build_sft_trainer(
@@ -230,13 +252,18 @@ def build_sft_trainer(
     training_args: Any,
     config: dict[str, Any],
 ) -> Any:
-    """Build a TRL ``SFTTrainer``.
+    """Build a TRL ``SFTTrainer``, adapting to the installed TRL signature.
+
+    Modern TRL (>=0.12) takes the tokenizer as ``processing_class`` and carries
+    SFT fields on ``SFTConfig`` (built in :func:`build_training_args`); older TRL
+    accepts ``tokenizer``/``dataset_text_field``/``max_seq_length``/``packing``
+    directly. We introspect the constructor and pass only what it accepts.
 
     Args:
         model: The (PEFT) model to train.
         tokenizer: The tokenizer.
         dataset: A ``DatasetDict`` with ``train``/``validation`` and a ``text`` field.
-        training_args: The ``TrainingArguments``.
+        training_args: The training arguments (``SFTConfig`` or ``TrainingArguments``).
         config: The full training config (uses the ``sft`` section).
 
     Returns:
@@ -246,19 +273,33 @@ def build_sft_trainer(
         ImportError: If trl is not installed.
     """
     _require("trl")
+    import inspect
+
     from trl import SFTTrainer
 
+    params = inspect.signature(SFTTrainer.__init__).parameters
     sft_cfg = config.get("sft", {})
-    return SFTTrainer(
-        model=model,
-        tokenizer=tokenizer,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation"),
-        args=training_args,
-        dataset_text_field=str(sft_cfg.get("dataset_text_field", "text")),
-        max_seq_length=int(sft_cfg.get("max_seq_length", 2048)),
-        packing=bool(sft_cfg.get("packing", True)),
-    )
+
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": dataset["train"],
+        "eval_dataset": dataset.get("validation"),
+    }
+    # Tokenizer argument was renamed processing_class in modern TRL.
+    if "processing_class" in params:
+        kwargs["processing_class"] = tokenizer
+    elif "tokenizer" in params:
+        kwargs["tokenizer"] = tokenizer
+    # Legacy TRL accepted these on the trainer; modern TRL takes them via SFTConfig.
+    if "dataset_text_field" in params:
+        kwargs["dataset_text_field"] = str(sft_cfg.get("dataset_text_field", "text"))
+    if "max_seq_length" in params:
+        kwargs["max_seq_length"] = int(sft_cfg.get("max_seq_length", 2048))
+    if "packing" in params:
+        kwargs["packing"] = bool(sft_cfg.get("packing", True))
+
+    return SFTTrainer(**kwargs)
 
 
 def _final_losses(trainer: Any) -> tuple[float | None, float | None]:

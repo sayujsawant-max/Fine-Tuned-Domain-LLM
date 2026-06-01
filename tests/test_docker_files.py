@@ -99,3 +99,18 @@ def test_serving_dockerfile_installs_serving_extra():
     """The serving image installs the vLLM serving extra."""
     text = (DOCKER / "Dockerfile.serving").read_text(encoding="utf-8")
     assert "[serving]" in text
+
+
+def test_serving_dockerfile_cuda_base_is_parameterised():
+    """The CUDA base image is overridable via a build arg."""
+    text = (DOCKER / "Dockerfile.serving").read_text(encoding="utf-8")
+    assert "ARG CUDA_IMAGE=" in text
+    assert "FROM ${CUDA_IMAGE}" in text
+
+
+def test_vllm_not_published_to_all_interfaces():
+    """vLLM's host port (if any) must bind to loopback only, never 0.0.0.0."""
+    vllm = _load(COMPOSE)["services"]["vllm"]
+    for mapping in vllm.get("ports", []):
+        # Mapping is "127.0.0.1:8000:8000"; reject bare "8000:8000" / "0.0.0.0:".
+        assert str(mapping).startswith("127.0.0.1:"), mapping

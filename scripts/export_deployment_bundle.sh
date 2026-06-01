@@ -26,17 +26,22 @@ echo "Building deployment bundle at ${OUT}…"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-# Helper: copy a path into the bundle preserving its relative layout.
+# Paths that must never enter the bundle (large/generated/secret).
+TAR_EXCLUDES=(
+  --exclude='node_modules' --exclude='.next' --exclude='__pycache__'
+  --exclude='.env' --exclude='.env.local' --exclude='*.log' --exclude='coverage'
+  --exclude='*.safetensors' --exclude='*.bin' --exclude='*.pt' --exclude='*.pth'
+)
+
+# Helper: copy a path into the bundle preserving its relative layout, streaming
+# through tar so excluded dirs (node_modules, .next, …) are never copied at all.
 copy_into() {
   local src="$1"
   if [[ ! -e "$src" ]]; then
     echo "  skip (missing): $src"
     return
   fi
-  local dest="${OUT}/$(dirname "$src")"
-  mkdir -p "$dest"
-  # Exclude caches and local env files defensively.
-  cp -r "$src" "$dest/" 2>/dev/null
+  tar cf - "${TAR_EXCLUDES[@]}" "$src" | tar xf - -C "$OUT"
   echo "  added: $src"
 }
 
@@ -53,13 +58,6 @@ copy_into .env.example
 copy_into README.md
 copy_into docs/deployment_guide.md
 copy_into reports/deployment_checklist.md
-
-# Strip artifacts that must never ship.
-find "$OUT" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
-find "$OUT" -type d -name "node_modules" -prune -exec rm -rf {} + 2>/dev/null || true
-find "$OUT" -type d -name ".next" -prune -exec rm -rf {} + 2>/dev/null || true
-find "$OUT" -type f \( -name ".env" -o -name ".env.local" -o -name "*.log" \) -delete 2>/dev/null || true
-find "$OUT" -type f \( -name "*.safetensors" -o -name "*.bin" -o -name "*.pt" -o -name "*.pth" \) -delete 2>/dev/null || true
 
 echo "Bundle ready: ${OUT}"
 echo "Contents:"

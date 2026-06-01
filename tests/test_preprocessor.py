@@ -48,6 +48,20 @@ def _metadata(raw_path: Path) -> dict:
     }
 
 
+def test_min_section_words_filters_short_sections(tmp_path, sample_10k_html):
+    """A high min_section_words threshold drops all sections; 0 keeps them."""
+    raw = _write_raw(tmp_path, sample_10k_html)
+
+    strict = FilingPreprocessor(min_section_words=10_000)
+    assert strict.process_file(raw, output_dir=tmp_path / "strict", metadata=_metadata(raw)) == []
+
+    lenient = FilingPreprocessor(min_section_words=0)
+    assert (
+        len(lenient.process_file(raw, output_dir=tmp_path / "lenient", metadata=_metadata(raw)))
+        == 5
+    )
+
+
 def test_process_file_writes_one_txt_per_section(tmp_path, sample_10k_html):
     """One .txt file is written per extracted section."""
     raw = _write_raw(tmp_path, sample_10k_html)

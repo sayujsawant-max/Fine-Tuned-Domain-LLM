@@ -20,7 +20,7 @@ from finsage.serving.middleware import (
     SecurityHeadersMiddleware,
     StructuredLoggingMiddleware,
 )
-from finsage.serving.rate_limiter import InMemoryRateLimiter
+from finsage.serving.rate_limiter import build_rate_limiter
 from finsage.serving.routes import router
 
 logger = get_logger(__name__)
@@ -53,9 +53,9 @@ def create_app() -> FastAPI:
         ),
     )
 
-    # Shared rate limiter (single-process). Stored on app.state so it can be
-    # swapped/inspected in tests.
-    app.state.rate_limiter = InMemoryRateLimiter(settings.rate_limit_requests_per_minute)
+    # Shared rate limiter (in-memory or Redis per settings). Stored on app.state
+    # so it can be swapped/inspected in tests.
+    app.state.rate_limiter = build_rate_limiter(settings)
 
     # Middleware: the last added runs first (outermost). Order on a request is
     # RequestID -> Logging -> SecurityHeaders -> RateLimit -> CORS -> routes,

@@ -24,10 +24,18 @@ class FilingPreprocessor:
     Args:
         section_extractor: Extractor to use. A default
             :class:`SectionExtractor` is created when ``None``.
+        min_section_words: Drop extracted sections with fewer than this many
+            whitespace tokens (0 disables filtering). Wired from
+            ``configs/data_config.yaml`` (``sections.min_section_words``).
     """
 
-    def __init__(self, section_extractor: SectionExtractor | None = None) -> None:
+    def __init__(
+        self,
+        section_extractor: SectionExtractor | None = None,
+        min_section_words: int = 0,
+    ) -> None:
         self.section_extractor = section_extractor or SectionExtractor()
+        self.min_section_words = max(0, min_section_words)
 
     @staticmethod
     def _identifiers(html_path: Path, metadata: dict[str, Any]) -> dict[str, str]:
@@ -95,6 +103,15 @@ class FilingPreprocessor:
 
         rows: list[dict[str, Any]] = []
         for section, text in sections.items():
+            word_count = len(text.split())
+            if self.min_section_words and word_count < self.min_section_words:
+                logger.info(
+                    "Skipping section %s (%d words < min_section_words=%d)",
+                    section,
+                    word_count,
+                    self.min_section_words,
+                )
+                continue
             section_dir.mkdir(parents=True, exist_ok=True)
             processed_path = section_dir / f"{section}.txt"
             processed_path.write_text(text, encoding="utf-8")

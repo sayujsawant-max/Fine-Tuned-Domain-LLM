@@ -14,7 +14,10 @@ Example::
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
+import yaml
 from rich.console import Console
 
 from finsage.config import get_settings
@@ -41,6 +44,10 @@ def extract(
     processed_manifest_path: str = typer.Option(
         "data/processed/sec/manifest.jsonl", help="Processed manifest output path."
     ),
+    config: str = typer.Option("configs/data_config.yaml", help="Data config YAML."),
+    min_section_words: int | None = typer.Option(
+        None, help="Drop sections below this word count; default from config."
+    ),
 ) -> None:
     """Process all raw filings in the manifest into per-section text files.
 
@@ -48,12 +55,25 @@ def extract(
         manifest_path: Path to the raw JSONL manifest.
         output_dir: Root directory for processed output.
         processed_manifest_path: Destination path for the processed manifest.
+        config: Path to the data config YAML (for ``sections.min_section_words``).
+        min_section_words: Override for the minimum section word count.
 
     Raises:
         typer.Exit: With code 1 if the raw manifest does not exist.
     """
     setup_logging(get_settings().log_level)
-    preprocessor = FilingPreprocessor()
+
+    threshold = min_section_words
+    if threshold is None:
+        config_path = Path(config)
+        if config_path.exists():
+            data_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            threshold = int(data_cfg.get("sections", {}).get("min_section_words", 0))
+        else:
+            threshold = 0
+
+    preprocessor = FilingPreprocessor(min_section_words=threshold)
+    logger.info("Using min_section_words=%d", threshold)
 
     try:
         rows = preprocessor.process_manifest(manifest_path, output_dir=output_dir)

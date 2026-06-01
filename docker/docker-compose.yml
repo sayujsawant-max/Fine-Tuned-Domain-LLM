@@ -16,11 +16,13 @@ services:
       dockerfile: docker/Dockerfile.serving
     image: finsage-vllm:latest
     container_name: finsage-vllm
-    # NOTE: port 8000 is exposed for LOCAL development convenience. In
-    # production, treat vLLM as INTERNAL — remove this `ports` mapping and reach
-    # it only via the `finsage-network` (the api service uses http://vllm:8000).
+    # vLLM is INTERNAL. The api service reaches it over `finsage-network` at
+    # http://vllm:8000 — that does not require any host port mapping.
+    # The mapping below binds to LOOPBACK ONLY (127.0.0.1) so the host can run
+    # local probes/benchmarks while the port stays unreachable from other hosts,
+    # the LAN, or the internet. For a fully isolated deployment, delete it.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       MODEL_PATH: /models/finsage-7b-merged
       SERVED_MODEL_NAME: finsage-7b
