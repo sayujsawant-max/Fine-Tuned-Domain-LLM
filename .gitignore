@@ -20,6 +20,9 @@ ENV/
 # Environment / secrets
 .env
 *.local
+*.log
+logs/
+api_keys.txt
 
 # Tooling caches
 .pytest_cache/

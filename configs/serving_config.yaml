@@ -1,4 +1,20 @@
-# vLLM serving configuration for FinSage-7B (Phase 7).
+# Serving configuration for FinSage-7B (Phase 7 vLLM + Phase 8 API wrapper).
+
+# Phase 8: public FastAPI wrapper.
+api:
+  host: 0.0.0.0
+  port: 8080
+  environment: development
+  api_secret_key: change-me
+  cors_allowed_origins:
+    - http://localhost:3000
+    - http://localhost:8501
+  rate_limit_requests_per_minute: 60
+  disclaimer_enabled: true
+  log_request_body: false
+  request_timeout_seconds: 60
+
+# Phase 7: internal vLLM inference server.
 vllm:
   model_path: checkpoints/finsage-7b-merged
   served_model_name: finsage-7b

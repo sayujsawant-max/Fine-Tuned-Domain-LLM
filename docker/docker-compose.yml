@@ -7,16 +7,29 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     image: finsage-api:latest
+    container_name: finsage-api
     ports:
       - "8080:8080"
-    env_file:
-      - ../.env
     environment:
       API_HOST: 0.0.0.0
       API_PORT: "8080"
-      # In later phases, point the API at the vLLM backend:
-      # VLLM_HOST: vllm
-      # VLLM_PORT: "8000"
+      API_SECRET_KEY: change-me
+      ENVIRONMENT: development
+      # The API proxies to the internal vLLM service (service DNS name `vllm`).
+      VLLM_BASE_URL: http://vllm:8000/v1
+      SERVED_MODEL_NAME: finsage-7b
+      RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
+      DISCLAIMER_ENABLED: "true"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8501"
+    depends_on:
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
   # --- Phase 7: vLLM inference server (GPU) -------------------------------

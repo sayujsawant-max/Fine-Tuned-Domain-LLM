@@ -26,24 +26,39 @@ FastAPI Wrapper (finsage.serving.app)  [auth, logging, disclaimer, safety]
 Frontend Demo (frontend/)
 ```
 
-## Phase 7 — serving (current)
+## Phase 8 — public API wrapper (current)
 
 ```
-Merged FinSage-7B model (checkpoints/finsage-7b-merged)
+User / Frontend / API client
         ↓
-vLLM OpenAI-compatible server (serving/vllm_server.sh)
+FastAPI Wrapper (finsage.serving.app, :8080)      ← only public surface
+        ├── Auth                 (finsage.serving.auth)
+        ├── Rate Limiting        (finsage.serving.rate_limiter / middleware)
+        ├── Structured Logging   (finsage.serving.middleware)
+        ├── Security Headers     (finsage.serving.middleware)
+        ├── Schema Validation    (finsage.serving.schemas)
+        ├── Prompt Templating    (finsage.serving.prompt_templates)
+        ├── Disclaimer Injection (finsage.serving.disclaimer)
+        └── Error Handling       (finsage.serving.errors)
+        ↓  VLLMClient (finsage.serving.vllm_client)
+vLLM OpenAI-compatible Server (serving/vllm_server.sh, :8000)   ← internal only
         ↓
-/v1/models   (health)
-/v1/chat/completions   (inference)
-        ↓
+FinSage-7B merged model (checkpoints/finsage-7b-merged)
+```
+
+Routes (`finsage.serving.routes`, prefix `/v1`): `GET /health` (public),
+`GET /ready`, `GET /models`, `GET /config`, `POST /chat`,
+`POST /chat/completions`. The vLLM endpoint is **internal** (no auth/disclaimer);
+the FastAPI wrapper is the only intended-public surface and owns auth, rate
+limiting, logging, validation, and disclaimer injection.
+
+## Phase 7 — internal vLLM engine
+
+```
+vLLM OpenAI-compatible server → /v1/models (health), /v1/chat/completions (inference)
 VLLMClient + health helpers (finsage.serving.vllm_client / health)
 Smoke tests (serving/test_endpoint.py) + latency benchmark (serving/benchmark_latency.py)
-        ↓
-Phase 8 FastAPI wrapper  [auth, logging, disclaimer, rate limiting]  ← public surface
 ```
-
-The vLLM endpoint is **internal** (no auth/disclaimer); Phase 8's FastAPI
-wrapper is the only intended-public surface.
 
 ## Components
 

@@ -3,12 +3,65 @@
 ## Topology
 
 ```
-client → FastAPI (public, :8080, Phase 8) → vLLM (internal, :8000, Phase 7) → merged model
+client → FastAPI wrapper (public, :8080, Phase 8) → vLLM (internal, :8000, Phase 7) → merged model
 ```
 
-Phase 7 delivers the **vLLM inference engine**. The public **FastAPI wrapper**
-(auth, logging, prompt templates, disclaimer injection, rate limiting) is
-**Phase 8** — until then, vLLM must not be exposed publicly.
+Phase 7 delivers the **vLLM inference engine**; Phase 8 delivers the public
+**FastAPI wrapper** (auth, logging, prompt templates, disclaimer injection, rate
+limiting). The vLLM server is **internal-only** and must never be exposed to the
+public internet — all public traffic goes through the FastAPI wrapper.
+
+## Phase 8 — FastAPI wrapper
+
+The wrapper (`finsage.serving.app:create_app`) is a thin, CPU-only service that
+proxies to vLLM over HTTP and layers on production concerns:
+
+| Concern | Where | Notes |
+|---------|-------|-------|
+| **Auth** | `finsage.serving.auth` | `X-API-Key` or `Authorization: Bearer`; constant-time compare. Dev allows the `change-me` placeholder with a warning; production rejects it. Public paths: `/v1/health`, `/docs`, `/openapi.json`, `/redoc`. |
+| **Rate limiting** | `finsage.serving.rate_limiter` + middleware | In-memory sliding window per client (API-key hash or IP). HTTP 429 + `X-RateLimit-*` headers. Single-process only. |
+| **Logging** | `StructuredLoggingMiddleware` | One JSON line per request: request_id, method, path, status, latency, client host, user agent, input **char count only** — never filing text (unless `LOG_REQUEST_BODY=true`). |
+| **Request IDs** | `RequestIDMiddleware` | UUID per request, echoed as `X-Request-ID`, included in every error body. |
+| **Security headers** | `SecurityHeadersMiddleware` | `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`. |
+| **Disclaimer** | `finsage.serving.disclaimer` | Appended (deduplicated) when `DISCLAIMER_ENABLED=true`. |
+| **Errors** | `finsage.serving.errors` | Uniform `{error, detail, request_id}`: 422 validation, 401 auth, 429 rate limit, 503 vLLM down, 500 unexpected. |
+
+### Run
+
+```bash
+# vLLM (GPU host):
+MODEL_PATH=checkpoints/finsage-7b-merged SERVED_MODEL_NAME=finsage-7b bash serving/vllm_server.sh
+# API (CPU):
+API_SECRET_KEY=change-me VLLM_BASE_URL=http://localhost:8000/v1 bash serving/start_api.sh
+python scripts/check_api_server.py --base-url http://localhost:8080/v1 --api-key change-me
+```
+
+### Docker Compose (API + vLLM)
+
+`docker/docker-compose.yml` defines `api` (CPU, `Dockerfile.api`, **no vLLM/GPU
+deps**) and `vllm` (GPU). `api` waits for `vllm` to become healthy
+(`depends_on: condition: service_healthy`) and points at it via
+`VLLM_BASE_URL=http://vllm:8000/v1`. Only the API port (8080) should be published
+externally.
+
+```bash
+make docker-build-api       # CPU image
+make docker-up-full         # vLLM + API
+```
+
+### Production considerations
+
+- **Set a real `API_SECRET_KEY`** and `ENVIRONMENT=production` (the placeholder
+  is rejected in production).
+- **Terminate TLS / use HTTPS** at a reverse proxy (nginx, Traefik, a cloud LB)
+  in front of the API.
+- **Restrict CORS** via `CORS_ALLOWED_ORIGINS` to known frontends — do not use
+  `*` with credentials.
+- **Use an external rate limiter** (e.g. Redis) for multi-replica deployments;
+  the in-memory limiter is per-process only.
+- **Put the API behind a reverse proxy** and keep vLLM on a private network.
+- **Do not log raw filings** — keep `LOG_REQUEST_BODY=false` (the default).
+- Rotate API keys; never commit `.env` or `api_keys.txt`.
 
 ## Why vLLM
 
@@ -87,9 +140,10 @@ Reports p50/p95/p99, average/min/max latency, and approximate tokens/sec.
 
 The vLLM endpoint has **no authentication, rate limiting, or disclaimer
 injection** (the optional `--api-key` is a single shared secret only). **Do not
-expose it to the public internet.** Phase 8 adds the FastAPI wrapper that owns
-auth, request logging, prompt templates, safety checks, and mandatory disclaimer
-injection, and is the only surface intended to be public.
+expose it to the public internet.** The Phase 8 FastAPI wrapper owns auth,
+request logging, prompt templates, safety checks, and mandatory disclaimer
+injection, and is the only surface intended to be public — publish only its port
+(8080) and keep vLLM (8000) on a private network.
 
 ## Environment
 

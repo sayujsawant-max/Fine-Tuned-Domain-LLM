@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 7 — vLLM serving ✅** (client/health/benchmark + tests are CPU-only; serving the model needs a GPU)
+**Current status: Phase 8 — FastAPI backend wrapper ✅** (auth, rate limiting, structured logging, disclaimer injection; CPU-only and fully tested with a mocked vLLM backend)
 
 ---
 
@@ -52,7 +52,7 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 5 | QLoRA fine-tuning pipeline (dry-run + real) | ✅ Done |
 | 6 | Fine-tuned evaluation + before/after benchmark | ✅ Done |
 | 7 | vLLM OpenAI-compatible serving | ✅ Done |
-| 8 | FastAPI backend (auth, logging, disclaimer) | ⏳ Planned |
+| 8 | FastAPI backend (auth, rate limiting, logging, disclaimer) | ✅ Done |
 | 9 | Frontend demo | ⏳ Planned |
 | 10 | Docker + deployment | ⏳ Planned |
 | 11 | Benchmark PDF + Hugging Face publishing | ⏳ Planned |
@@ -74,8 +74,8 @@ make install-dev          # or: pip install -e ".[dev]"
 # 3. Run the quality gates
 make check                # lint + typecheck + test
 
-# 4. Run the API locally (returns a mock response in Phase 1)
-make serve-api            # or: uvicorn finsage.serving.app:app --port 8080
+# 4. Run the API locally (proxies to vLLM; /v1/health works without it)
+make serve-api            # or: bash serving/start_api.sh
 curl http://localhost:8080/v1/health
 ```
 
@@ -493,10 +493,118 @@ found` → `pip install -e ".[serving]"`; gated base model → set `HF_TOKEN`; p
 (it ships the tokenizer); slow startup → 7B weights take time to load (poll
 `/v1/models`). See [docs/deployment_guide.md](docs/deployment_guide.md).
 
+## Phase 8: FastAPI Backend Wrapper
+
+The Phase 8 wrapper is the **only public surface**. It sits in front of the
+internal vLLM server and adds API key auth, request/response validation,
+financial disclaimer injection, structured JSON logging, request IDs, rate
+limiting, clean error handling, and health/readiness checks.
+
+```
+Frontend / API client → FastAPI wrapper (:8080) → vLLM (:8000, internal) → FinSage-7B
+```
+
+**Why not expose vLLM directly?** The vLLM OpenAI server has no real auth (only a
+single optional shared secret), no rate limiting, no disclaimer, no request
+logging, and no input validation. Exposing it publicly would leak an unmetered,
+unsafe inference endpoint. The FastAPI wrapper owns all of those concerns.
+
+### Endpoints
+
+| Method & path | Auth | Purpose |
+|---------------|------|---------|
+| `GET /v1/health` | no | Liveness (`status`, `service`, `version`) |
+| `GET /v1/ready` | yes | Readiness — can the API reach vLLM? |
+| `GET /v1/models` | yes | Proxy the vLLM model list |
+| `GET /v1/config` | yes | Safe public config (no secrets) |
+| `POST /v1/chat` | yes | App-friendly grounded chat |
+| `POST /v1/chat/completions` | yes | OpenAI-compatible proxy (no streaming) |
+
+### Start vLLM (GPU), then the API (CPU)
+
+```bash
+# 1. Start the internal vLLM server (GPU host) — see Phase 7 above:
+MODEL_PATH=checkpoints/finsage-7b-merged SERVED_MODEL_NAME=finsage-7b \
+  bash serving/vllm_server.sh
+
+# 2. Start the public API wrapper (no GPU needed):
+API_SECRET_KEY=change-me VLLM_BASE_URL=http://localhost:8000/v1 \
+  bash serving/start_api.sh        # or: make serve-api
+```
+
+`/v1/health` responds even when vLLM is down; `/v1/ready` reports the backend
+status.
+
+### Authentication
+
+Send the key via **`X-API-Key`** or **`Authorization: Bearer <key>`**. In
+`development` with the placeholder `change-me` secret, requests are allowed with
+a logged warning; set `ENVIRONMENT=production` and a strong `API_SECRET_KEY`
+before deploying (production rejects the placeholder).
+
+### Test the API
+
+```bash
+python scripts/check_api_server.py --base-url http://localhost:8080/v1 --api-key change-me
+# health / readiness probes:
+curl http://localhost:8080/v1/health
+curl -H "X-API-Key: change-me" http://localhost:8080/v1/ready
+```
+
+### Example `/v1/chat` call
+
+```bash
+curl -X POST http://localhost:8080/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me" \
+  -d '{
+    "question": "Summarize the key risk factors.",
+    "filing_excerpt": "The company faces supply chain disruption, competition, and regulatory uncertainty.",
+    "task_type": "risk_summary",
+    "max_tokens": 256,
+    "temperature": 0.0
+  }'
+```
+
+The response carries the `answer` (with appended disclaimer), `model`,
+`task_type`, `disclaimer`, `request_id`, and `latency_ms`.
+
+### Rate limiting & disclaimer
+
+- **Rate limiting:** an in-memory sliding window of
+  `RATE_LIMIT_REQUESTS_PER_MINUTE` requests (default 60) per client (API-key hash
+  or client IP). Over-budget requests get **HTTP 429** with `X-RateLimit-Limit`,
+  `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers. Health/docs paths are
+  exempt. For multi-replica production, swap in Redis.
+- **Disclaimer:** when `DISCLAIMER_ENABLED=true`, the financial disclaimer is
+  appended to every answer (deduplicated so it never repeats). Per-request,
+  `/v1/chat` honours `include_disclaimer`.
+
+### Run with Docker
+
+```bash
+make docker-build-api          # CPU image; does NOT install vLLM
+make docker-up-full            # vLLM (GPU) + API together
+# API only (still starts vLLM via depends_on):
+make docker-up-api
+```
+
+### Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| `401` on a protected route | Missing/invalid key — send `X-API-Key`. In prod, set a real `API_SECRET_KEY`. |
+| `/v1/ready` → `not_ready` | vLLM is down/unreachable — check `VLLM_BASE_URL` and the vLLM logs. |
+| `503` from `/v1/chat` | Backend call failed — vLLM not started or wrong URL. |
+| `429` responses | Rate limit hit — raise `RATE_LIMIT_REQUESTS_PER_MINUTE` or back off. |
+| `422` on `/v1/chat` | Validation — empty `question`/`filing_excerpt`, bad `task_type`, or out-of-range `max_tokens`/`temperature`. |
+| `400` on `/v1/chat/completions` | `stream:true` is not supported in Phase 8. |
+
 ## Deployment plan
 
-Docker Compose orchestrates the stack: `api` (FastAPI) now, with `vllm` and
-`frontend` services scaffolded for later phases. See [docker/](docker/).
+Docker Compose orchestrates the stack: `api` (public FastAPI, CPU) depends on
+`vllm` (internal inference, GPU), with `frontend` scaffolded for Phase 9. See
+[docker/](docker/) and [docs/deployment_guide.md](docs/deployment_guide.md).
 
 ## ⚠️ Disclaimer — not financial advice
 

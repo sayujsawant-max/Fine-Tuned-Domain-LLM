@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from finsage.serving.health import check_openai_compatible_health, wait_for_vllm
-from finsage.serving.vllm_client import VLLMClient, VLLMClientError
+from finsage.serving.vllm_client import VLLMClient, VLLMClientError, extract_message_content
 
 __all__ = [
     "VLLMClient",
     "VLLMClientError",
     "check_openai_compatible_health",
     "create_app",
+    "extract_message_content",
     "wait_for_vllm",
 ]
 

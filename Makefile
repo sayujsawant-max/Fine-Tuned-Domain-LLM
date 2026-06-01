@@ -6,8 +6,8 @@ PYTHON ?= python
         build-dataset validate-dataset train-dry-run train merge-adapter \
         eval-baseline eval-baseline-real eval-finetuned eval-finetuned-adapter \
         eval-finetuned-merged compare-models serve-api serve-vllm serve-vllm-lora \
-        test-vllm benchmark-vllm docker-build docker-up docker-build-serving \
-        docker-up-serving report
+        test-vllm test-api-server benchmark-vllm docker-build docker-up docker-build-serving \
+        docker-up-serving docker-build-api docker-up-api docker-up-full report
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -106,8 +106,11 @@ report: compare-models ## Alias for compare-models
 # ---------------------------------------------------------------------------
 # Serving (Phase 7: vLLM)
 # ---------------------------------------------------------------------------
-serve-api: ## Run the FastAPI service (Phase 8)
-	$(PYTHON) -m uvicorn finsage.serving.app:app --host $${API_HOST:-localhost} --port $${API_PORT:-8080}
+serve-api: ## Run the FastAPI wrapper (Phase 8)
+	bash serving/start_api.sh
+
+test-api-server: ## Smoke-test a running API server
+	$(PYTHON) scripts/check_api_server.py --base-url http://localhost:8080/v1 --api-key change-me
 
 serve-vllm: ## Start the vLLM OpenAI-compatible server (merged model, GPU)
 	bash serving/vllm_server.sh
@@ -135,3 +138,12 @@ docker-build-serving: ## Build the vLLM serving image (GPU)
 
 docker-up-serving: ## Start only the vLLM service (GPU)
 	docker compose -f docker/docker-compose.yml up vllm
+
+docker-build-api: ## Build the FastAPI wrapper image (CPU)
+	docker build -f docker/Dockerfile.api -t finsage-api:latest .
+
+docker-up-api: ## Start the API service (starts vLLM via depends_on)
+	docker compose -f docker/docker-compose.yml up api
+
+docker-up-full: ## Start the full stack (vLLM + API)
+	docker compose -f docker/docker-compose.yml up

@@ -1,15 +1,19 @@
 # FastAPI service image for FinSage-7B (CPU-only, lightweight).
+# This image deliberately does NOT install vLLM or any GPU/ML dependencies —
+# it only proxies to the internal vLLM server over HTTP.
 FROM python:3.11-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    API_HOST=0.0.0.0 \
+    API_PORT=8080
 
 WORKDIR /app
 
-# System deps for lxml/beautifulsoup4.
+# System deps: curl for the container healthcheck; build tooling for lxml.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
+    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the lightweight default dependencies first for better layer caching.
@@ -17,10 +21,11 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --upgrade pip && pip install .
 
-# App source.
+# App source / config / launch script.
 COPY configs ./configs
+COPY serving ./serving
 
 EXPOSE 8080
 
-# Bind to 0.0.0.0 inside the container.
-CMD ["uvicorn", "finsage.serving.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# start_api.sh binds to 0.0.0.0 and honours API_HOST / API_PORT / API_RELOAD.
+CMD ["bash", "serving/start_api.sh"]
