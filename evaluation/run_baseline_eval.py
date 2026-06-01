@@ -55,6 +55,7 @@ def main(
     temperature: float = typer.Option(0.0, help="Sampling temperature."),
     top_p: float = typer.Option(1.0, help="Nucleus sampling top-p."),
     save_every: int = typer.Option(25, help="Checkpoint predictions every N examples."),
+    faithfulness: str = typer.Option("lexical", help="Faithfulness metric: lexical | nli."),
     report_path: str = typer.Option(
         "reports/baseline_eval_report.md", help="Markdown report output path."
     ),
@@ -101,7 +102,9 @@ def main(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
-    runner = EvalRunner(generator=generator, output_dir=output_dir, save_every=save_every)
+    runner = EvalRunner(
+        generator=generator, output_dir=output_dir, save_every=save_every, faithfulness=faithfulness
+    )
     try:
         results = runner.run(test_file, max_examples=max_examples)
     except Exception as exc:  # surface a clean message, non-zero exit

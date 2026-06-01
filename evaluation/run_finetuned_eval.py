@@ -136,6 +136,7 @@ def main(
         False, "--export-pdf/--no-export-pdf", help="Export the report to PDF (needs pandoc)."
     ),
     report_path: str = typer.Option("reports/benchmark_report.md", help="Report output path."),
+    faithfulness: str = typer.Option("lexical", help="Faithfulness metric: lexical | nli."),
 ) -> None:
     """Evaluate the fine-tuned model, compare to baseline, and write outputs.
 
@@ -192,7 +193,7 @@ def main(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
-    runner = EvalRunner(generator=generator, output_dir=output_dir)
+    runner = EvalRunner(generator=generator, output_dir=output_dir, faithfulness=faithfulness)
     try:
         finetuned_results = runner.run_with_prefix(
             test_file, "finetuned", max_examples=max_examples

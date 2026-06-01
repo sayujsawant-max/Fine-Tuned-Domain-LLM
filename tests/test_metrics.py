@@ -8,6 +8,7 @@ from finsage.evaluation.metrics import (
     compute_exact_match,
     compute_lexical_faithfulness,
     compute_metrics_for_example,
+    compute_nli_faithfulness,
     compute_numeric_match,
     compute_rouge_l,
     compute_token_f1,
@@ -109,6 +110,31 @@ def test_lexical_faithfulness_bounds():
     ]
     assert 0.0 <= low <= high <= 1.0
     assert high > low
+
+
+def test_nli_faithfulness_with_injected_scorer():
+    """NLI faithfulness uses the injected scorer and clamps to [0, 1]."""
+
+    # Fake scorer: high entailment when the prediction echoes the premise.
+    def scorer(premise: str, hypothesis: str) -> float:
+        return 0.9 if "revenue grew" in hypothesis.lower() else 0.1
+
+    high = compute_nli_faithfulness("Revenue grew.", "Revenue grew on demand.", scorer=scorer)
+    low = compute_nli_faithfulness("Unrelated claim.", "Revenue grew on demand.", scorer=scorer)
+    assert high["nli_faithfulness"] == 0.9
+    assert low["nli_faithfulness"] == 0.1
+    # Empty prediction is vacuously faithful and never calls the scorer.
+    assert compute_nli_faithfulness("", "anything", scorer=scorer)["nli_faithfulness"] == 1.0
+
+
+def test_compute_metrics_for_example_nli_mode():
+    """faithfulness='nli' swaps in nli_faithfulness via the injected scorer."""
+    example = {"task_type": "filing_qa", "output": "Revenue grew.", "input": "Revenue grew."}
+    result = compute_metrics_for_example(
+        example, "Revenue grew.", faithfulness="nli", nli_scorer=lambda p, h: 0.8
+    )
+    assert result["nli_faithfulness"] == 0.8
+    assert "lexical_faithfulness" not in result
 
 
 def test_compute_metrics_for_example_dispatches_by_task():

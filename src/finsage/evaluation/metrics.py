@@ -13,6 +13,7 @@ import json
 import re
 import string
 from collections import Counter
+from collections.abc import Callable
 from typing import Any
 
 from finsage.logging_utils import get_logger
@@ -366,6 +367,88 @@ def compute_lexical_faithfulness(prediction: str, source_text: str) -> dict[str,
 
 
 # ---------------------------------------------------------------------------
+# Faithfulness (NLI entailment)
+# ---------------------------------------------------------------------------
+#: Default MNLI model for entailment-based faithfulness.
+DEFAULT_NLI_MODEL = "facebook/bart-large-mnli"
+
+_NLI_DEPS_MSG = (
+    "NLI faithfulness requires transformers (+ torch). Install with " "pip install -e '.[ml]'"
+)
+_NLI_SCORER_CACHE: dict[str, EntailmentScorer] = {}
+
+#: A scorer maps (premise, hypothesis) -> entailment probability in [0, 1].
+EntailmentScorer = Callable[[str, str], float]
+
+
+def build_nli_scorer(model_name: str = DEFAULT_NLI_MODEL) -> EntailmentScorer:
+    """Build a cached entailment scorer backed by a transformers MNLI model.
+
+    The model is loaded lazily and cached per ``model_name``. This downloads
+    weights on first use and is **not** exercised by the test suite (tests inject
+    a fake scorer instead).
+
+    Args:
+        model_name: Hugging Face MNLI model id.
+
+    Returns:
+        A callable ``(premise, hypothesis) -> entailment_probability``.
+
+    Raises:
+        ImportError: If transformers is not installed.
+    """
+    if model_name in _NLI_SCORER_CACHE:
+        return _NLI_SCORER_CACHE[model_name]
+    try:
+        from transformers import pipeline
+    except ImportError as exc:  # pragma: no cover - exercised only without deps
+        raise ImportError(_NLI_DEPS_MSG) from exc
+
+    pipe = pipeline("text-classification", model=model_name, top_k=None)
+
+    def _score(premise: str, hypothesis: str) -> float:
+        outputs = pipe({"text": premise, "text_pair": hypothesis})
+        rows = outputs[0] if outputs and isinstance(outputs[0], list) else outputs
+        for row in rows:
+            if str(row.get("label", "")).upper().startswith("ENTAIL"):
+                return float(row.get("score", 0.0))
+        return 0.0
+
+    _NLI_SCORER_CACHE[model_name] = _score
+    return _score
+
+
+def compute_nli_faithfulness(
+    prediction: str,
+    source_text: str,
+    scorer: EntailmentScorer | None = None,
+    model_name: str = DEFAULT_NLI_MODEL,
+) -> dict[str, float]:
+    """Estimate faithfulness as entailment of the prediction by the source.
+
+    Treats the source excerpt as the premise and the prediction as the
+    hypothesis, returning the entailment probability — a far better faithfulness
+    signal than lexical overlap (it can penalise contradiction/unsupported
+    synthesis).
+
+    Args:
+        prediction: The predicted answer (hypothesis).
+        source_text: The source filing excerpt (premise).
+        scorer: Optional entailment scorer; built from ``model_name`` when
+            ``None`` (tests inject a fake to stay offline).
+        model_name: MNLI model id used when ``scorer`` is ``None``.
+
+    Returns:
+        ``{"nli_faithfulness": value}`` in ``[0, 1]``.
+    """
+    if not prediction.strip():
+        return {"nli_faithfulness": 1.0}
+    scorer = scorer or build_nli_scorer(model_name)
+    prob = float(scorer(source_text, prediction))
+    return {"nli_faithfulness": max(0.0, min(1.0, prob))}
+
+
+# ---------------------------------------------------------------------------
 # Dispatch + aggregation
 # ---------------------------------------------------------------------------
 _TASK_METRICS: dict[str, tuple[str, ...]] = {
@@ -384,12 +467,22 @@ _TASK_METRICS: dict[str, tuple[str, ...]] = {
 _DEFAULT_METRICS = ("token_f1", "lexical_faithfulness")
 
 
-def compute_metrics_for_example(example: dict, prediction: str) -> dict[str, float]:
+def compute_metrics_for_example(
+    example: dict,
+    prediction: str,
+    faithfulness: str = "lexical",
+    nli_scorer: EntailmentScorer | None = None,
+) -> dict[str, float]:
     """Compute the metrics appropriate to an example's task type.
 
     Args:
         example: An instruction example with ``task_type``, ``output``, ``input``.
         prediction: The model prediction.
+        faithfulness: ``"lexical"`` (default, cheap proxy) or ``"nli"``
+            (entailment-based). When ``"nli"``, the faithfulness metric is keyed
+            ``nli_faithfulness``.
+        nli_scorer: Optional entailment scorer used when ``faithfulness="nli"``;
+            built from the default MNLI model when ``None``.
 
     Returns:
         A flat mapping of metric name to value (always JSON-serialisable).
@@ -413,7 +506,10 @@ def compute_metrics_for_example(example: dict, prediction: str) -> dict[str, flo
             elif name == "classification_accuracy":
                 result.update(compute_classification_accuracy(prediction, reference))
             elif name == "lexical_faithfulness":
-                result.update(compute_lexical_faithfulness(prediction, source))
+                if faithfulness == "nli":
+                    result.update(compute_nli_faithfulness(prediction, source, scorer=nli_scorer))
+                else:
+                    result.update(compute_lexical_faithfulness(prediction, source))
         except Exception:  # pragma: no cover - defensive, must never crash eval
             logger.warning("Metric %s failed for task %s; recording 0.0", name, task_type)
             result[name] = 0.0

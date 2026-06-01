@@ -76,6 +76,12 @@ docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
 ]
+# Optional shared rate-limit backend for multi-replica API deployments.
+# Enabled at runtime via RATE_LIMIT_BACKEND=redis + REDIS_URL; the API falls
+# back to the in-memory limiter when this is not installed/reachable.
+redis = [
+    "redis>=5.0",
+]
 
 [project.scripts]
 finsage-download = "scripts.download_edgar:app"

@@ -1,29 +1,43 @@
+"use client";
+
 import { BarChart3, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { type BenchmarkMetric, SAMPLE_BENCHMARK } from "@/lib/benchmark";
 import { cn } from "@/lib/utils";
-
-export interface BenchmarkMetric {
-  label: string;
-  value: string;
-  delta?: string;
-}
-
-/**
- * Placeholder benchmark figures. Replace with actual Phase 6 benchmark results
- * (reports/figures/comparison_summary.json) after a real evaluation run.
- */
-const METRICS: readonly BenchmarkMetric[] = [
-  { label: "Filing Q&A F1", value: "0.71", delta: "+0.14" },
-  { label: "Risk Summary ROUGE-L", value: "0.38", delta: "+0.09" },
-  { label: "Metric Extraction Accuracy", value: "0.86", delta: "+0.21" },
-  { label: "Faithfulness Score", value: "0.92", delta: "+0.17" },
-];
 
 export interface BenchmarkSummaryProps {
   className?: string;
 }
 
-/** Benchmark cards (sample values) comparing FinSage-7B vs the base model. */
+/**
+ * Benchmark cards comparing FinSage-7B vs the base model.
+ *
+ * Figures come from `/api/benchmark`, which reports whether they are a real
+ * evaluation report or the built-in sample; the label reflects that source.
+ * Falls back to the sample while loading or if the route is unavailable.
+ */
 export function BenchmarkSummary({ className }: BenchmarkSummaryProps) {
+  const [metrics, setMetrics] = useState<BenchmarkMetric[]>(SAMPLE_BENCHMARK);
+  const [source, setSource] = useState<"report" | "sample">("sample");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/benchmark")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && data?.metrics?.length) {
+          setMetrics(data.metrics);
+          setSource(data.source === "report" ? "report" : "sample");
+        }
+      })
+      .catch(() => {
+        /* keep the sample fallback */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex items-center gap-2">
@@ -32,7 +46,7 @@ export function BenchmarkSummary({ className }: BenchmarkSummaryProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {METRICS.map((m) => (
+        {metrics.map((m) => (
           <div key={m.label} className="rounded-xl border border-white/10 bg-ink-900/40 p-3">
             <p className="text-xs text-slate-400">{m.label}</p>
             <div className="mt-1 flex items-baseline gap-2">
@@ -48,7 +62,9 @@ export function BenchmarkSummary({ className }: BenchmarkSummaryProps) {
       </div>
 
       <p className="text-xs italic text-slate-500">
-        Sample values. Replace with actual Phase 6 benchmark results after real evaluation.
+        {source === "report"
+          ? "Live figures from the evaluation report (BENCHMARK_DATA)."
+          : "Sample values. Provide real Phase 6 results via BENCHMARK_DATA to show live figures."}
       </p>
     </div>
   );

@@ -28,6 +28,10 @@ class EvalRunner:
         generator: The prediction generator (mock or transformers).
         output_dir: Directory for prediction/metric outputs.
         save_every: Checkpoint predictions to disk every N examples.
+        faithfulness: Faithfulness metric mode — ``"lexical"`` (default) or
+            ``"nli"`` (entailment-based; requires the ``ml`` extra at runtime).
+        nli_scorer: Optional entailment scorer for ``faithfulness="nli"``;
+            built from the default MNLI model when ``None``.
     """
 
     def __init__(
@@ -35,10 +39,14 @@ class EvalRunner:
         generator: BaseGenerator,
         output_dir: Path | str = "reports/figures",
         save_every: int = 25,
+        faithfulness: str = "lexical",
+        nli_scorer: Any | None = None,
     ) -> None:
         self.generator = generator
         self.output_dir = Path(output_dir)
         self.save_every = max(1, save_every)
+        self.faithfulness = faithfulness
+        self.nli_scorer = nli_scorer
 
     def load_examples(
         self, test_file: Path | str, max_examples: int | None = None
@@ -85,7 +93,12 @@ class EvalRunner:
         for index, example in enumerate(examples, start=1):
             raw = self.generator.generate(example)
             prediction = normalize_prediction(raw)
-            metrics = compute_metrics_for_example(example, prediction)
+            metrics = compute_metrics_for_example(
+                example,
+                prediction,
+                faithfulness=self.faithfulness,
+                nli_scorer=self.nli_scorer,
+            )
             input_text = str(example.get("input", ""))
             rows.append(
                 {
