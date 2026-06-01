@@ -101,16 +101,25 @@ Reports p50/p95/p99, average/min/max, and (vLLM) approximate tokens/sec to
 
 ### 9. Security checklist
 
-- [ ] Set a strong `API_SECRET_KEY` (never `change-me`); rotate periodically.
-- [ ] Do **not** expose vLLM (:8000) publicly — drop its `ports` mapping in prod.
+- [ ] Set a strong `API_SECRET_KEY` (never `change-me`). For rotation, issue
+      multiple keys at once: `API_SECRET_KEY=new-key,old-key` (comma-separated).
+- [ ] vLLM is **internal**: the base compose binds :8000 to **loopback only**
+      (`127.0.0.1`), so it is unreachable off-host. For full isolation, delete the
+      `ports` mapping entirely (the api reaches it via `http://vllm:8000`).
 - [ ] Serve over **HTTPS** (reverse proxy / platform TLS).
 - [ ] Restrict `CORS_ALLOWED_ORIGINS` to the real frontend origin(s).
 - [ ] Keep `LOG_REQUEST_BODY=false` — never log raw filings.
 - [ ] Put the stack behind a reverse proxy + firewall; expose only :3000 (and :8080 if needed).
-- [ ] Use an external rate limiter (e.g. Redis) for multi-replica API.
+- [ ] For multi-replica API, set `RATE_LIMIT_BACKEND=redis` + `REDIS_URL` and
+      install the `redis` extra (`pip install -e ".[redis]"`). The limiter falls
+      back to in-memory (per-process) if Redis is unavailable.
 - [ ] Monitor GPU memory; tune `GPU_MEMORY_UTILIZATION` / `MAX_MODEL_LEN`.
+- [ ] Match the vLLM CUDA base to your driver/wheel:
+      `--build-arg CUDA_IMAGE=nvidia/cuda:12.4.1-runtime-ubuntu22.04`.
 - [ ] Add authentication in front of the frontend if it is public.
 - [ ] Confirm the browser bundle holds no secret (`grep -r NEXT_PUBLIC frontend`).
+- [ ] Populate the benchmark panel with real metrics via the frontend
+      `BENCHMARK_DATA` env var once a real evaluation has run.
 
 ### 10. Public demo deployment options
 

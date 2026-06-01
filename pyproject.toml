@@ -72,6 +72,11 @@ serving = [
     "vllm>=0.4",
     "httpx>=0.27",
 ]
+llm = [
+    # Optional: LLM-assisted dataset target enhancement (Phase 3.5). Needs an
+    # ANTHROPIC_API_KEY at runtime; never part of the default install.
+    "anthropic>=0.40",
+]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
