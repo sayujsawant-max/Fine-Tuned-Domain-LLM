@@ -1,0 +1,9 @@
+# Frontend demo image for FinSage-7B. PLACEHOLDER — finalised in Phase 10.
+#
+# The demo stack (Streamlit or Next.js) is decided in Phase 10. This placeholder
+# keeps the compose file complete without pulling a heavy toolchain early.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+CMD ["python", "-c", "print('Phase 10 placeholder — frontend demo not built yet.')"]

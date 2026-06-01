@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+*.local
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Project artifacts (large / generated) — kept out of git
+# ---------------------------------------------------------------------------
+checkpoints/
+wandb/
+mlruns/
+*.bin
+*.safetensors
+*.pt
+*.gguf
+
+# Raw + processed data (only .gitkeep / cards are tracked)
+data/raw/*
+data/processed/*
+data/datasets/*
+!data/**/.gitkeep
+!data/dataset_card.md
+
+# Generated report figures
+reports/figures/*
+!reports/figures/.gitkeep

@@ -1,0 +1,44 @@
+# Evaluation configuration for FinSage-7B (Phases 5 & 7).
+models:
+  base:
+    name: base-mistral-7b
+    model_id: mistralai/Mistral-7B-Instruct-v0.3
+  finetuned:
+    name: finsage-7b
+    model_id: mistralai/Mistral-7B-Instruct-v0.3
+    adapter_path: ./checkpoints/finsage-7b-adapter
+
+dataset:
+  test_path: ./data/datasets/test.jsonl
+
+generation:
+  max_new_tokens: 512
+  temperature: 0.0
+  top_p: 1.0
+
+# task_type -> primary / secondary metric keys (see finsage.evaluation.metrics)
+tasks:
+  filing_qa:
+    primary: exact_match
+    secondary: f1
+  risk_summary:
+    primary: rouge_l
+    secondary: bert_score
+  metric_extraction:
+    primary: numeric_exact_match
+    secondary: unit_accuracy
+  outlook_classification:
+    primary: accuracy
+    secondary: macro_f1
+  hallucination_detection:
+    primary: faithfulness
+    secondary: citation_precision
+
+judge:
+  enabled: false
+  provider: openai
+  model: gpt-4o-mini
+
+output:
+  results_dir: ./reports
+  figures_dir: ./reports/figures

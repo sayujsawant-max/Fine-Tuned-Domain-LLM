@@ -1,0 +1,20 @@
+# vLLM serving image for FinSage-7B (GPU). PLACEHOLDER — finalised in Phase 8.
+#
+# vLLM requires CUDA. Build/run this on a GPU host with the NVIDIA Container
+# Toolkit installed. The official vLLM image is the simplest starting point:
+#
+#   FROM vllm/vllm-openai:latest
+#   # The merged model is mounted at runtime (see docker-compose.yml), e.g.
+#   #   -v $(pwd)/checkpoints:/checkpoints
+#   ENTRYPOINT ["python", "-m", "vllm.entrypoints.openai.api_server", \
+#               "--model", "/checkpoints/finsage-7b-merged", \
+#               "--served-model-name", "finsage-7b", \
+#               "--host", "0.0.0.0", "--port", "8000"]
+#
+# Kept as a placeholder so the default (CPU) build does not pull CUDA layers.
+FROM python:3.11-slim
+
+RUN echo "FinSage-7B vLLM serving image is a Phase 8 placeholder. See comments above." \
+    && echo "Build the real GPU image from vllm/vllm-openai:latest."
+
+CMD ["python", "-c", "print('Phase 8 placeholder — build the GPU vLLM image.')"]

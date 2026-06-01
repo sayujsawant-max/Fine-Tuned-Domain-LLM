@@ -1,0 +1,26 @@
+# Serving configuration for FinSage-7B (Phases 8 & 9).
+vllm:
+  model: ./checkpoints/finsage-7b-merged
+  host: localhost
+  port: 8000
+  dtype: bfloat16
+  max_model_len: 4096
+  gpu_memory_utilization: 0.90
+  served_model_name: finsage-7b
+
+api:
+  host: localhost
+  port: 8080
+  title: FinSage-7B API
+  cors_allow_origins:
+    - "*"
+  request_timeout_seconds: 60
+
+prompt:
+  system: >-
+    You are FinSage, a financial-filing analysis assistant. Answer strictly from
+    the provided filing text. If the answer is not present, say so. Never invent
+    figures. Distinguish reported facts from forward-looking statements.
+  disclaimer: >-
+    FinSage-7B is not a licensed financial advisor. Outputs are not investment
+    recommendations. Verify all responses against the original filings.

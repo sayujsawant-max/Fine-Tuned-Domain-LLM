@@ -1,0 +1,26 @@
+# FastAPI service image for FinSage-7B (CPU-only, lightweight).
+FROM python:3.11-slim AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# System deps for lxml/beautifulsoup4.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install the lightweight default dependencies first for better layer caching.
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --upgrade pip && pip install .
+
+# App source.
+COPY configs ./configs
+
+EXPOSE 8080
+
+# Bind to 0.0.0.0 inside the container.
+CMD ["uvicorn", "finsage.serving.app:app", "--host", "0.0.0.0", "--port", "8080"]

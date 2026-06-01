@@ -1,0 +1,50 @@
+# FinSage-7B stack. Phase 1 ships the CPU `api` service; `vllm` and `frontend`
+# are scaffolded but commented out until Phases 8 and 10.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    image: finsage-api:latest
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../.env
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: "8080"
+      # In later phases, point the API at the vLLM backend:
+      # VLLM_HOST: vllm
+      # VLLM_PORT: "8000"
+    restart: unless-stopped
+
+  # --- Phase 8: vLLM inference server (GPU) -------------------------------
+  # vllm:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile.serving
+  #   image: finsage-vllm:latest
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ../checkpoints:/checkpoints
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+
+  # --- Phase 10: frontend demo -------------------------------------------
+  # frontend:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile.frontend
+  #   image: finsage-frontend:latest
+  #   ports:
+  #     - "8501:8501"
+  #   depends_on:
+  #     - api
+  #   restart: unless-stopped
