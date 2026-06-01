@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 3 — Instruction dataset generation ✅** (deterministic, CPU-friendly, no GPU/model/network required)
+**Current status: Phase 4 — Baseline evaluation ✅** (mock backend is CPU-only; real Mistral-7B baseline is optional and GPU-bound)
 
 ---
 
@@ -48,8 +48,8 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 1 | Project scaffold, configs, API stubs, tests, tooling | ✅ Done |
 | 2 | SEC EDGAR ingestion + section preprocessing | ✅ Done |
 | 3 | Chunking + instruction dataset generation (JSONL) | ✅ Done |
-| 4 | Dataset quality pass (LLM/human-reviewed targets) | ⏳ Planned |
-| 5 | Baseline evaluation (base Mistral-7B) | ⏳ Planned |
+| 4 | Baseline evaluation (base Mistral-7B, mock + real backends) | ✅ Done |
+| 5 | Dataset quality pass (LLM/human-reviewed targets) | ⏳ Planned |
 | 6 | QLoRA fine-tuning | ⏳ Planned |
 | 7 | Fine-tuned evaluation + benchmark report | ⏳ Planned |
 | 8 | vLLM serving | ⏳ Planned |
@@ -238,6 +238,55 @@ See [docs/dataset_guide.md](docs/dataset_guide.md) and
   [configs/training_config.yaml](configs/training_config.yaml).
 
 See [docs/training_guide.md](docs/training_guide.md).
+
+## Baseline evaluation (Phase 4)
+
+**What it is:** running the *un-fine-tuned* base model over the held-out test set
+and scoring it, to establish the "before" numbers. **Why before fine-tuning:**
+without a baseline the post-fine-tune scores mean nothing — the whole project
+thesis is the *delta* between base Mistral-7B and FinSage-7B on identical data
+and metrics.
+
+Two backends:
+
+- **`mock`** (default, CPU-only, no dependencies) — deterministic answers for
+  exercising the full pipeline and CI. **It only validates plumbing; its scores
+  are not a real model baseline.**
+- **`transformers`** (optional, GPU) — real Hugging Face inference on the base
+  model. Requires `pip install -e ".[ml,training]"`.
+
+**Mock run:**
+
+```bash
+python evaluation/run_baseline_eval.py \
+  --test-file tests/fixtures/eval_test_sample.jsonl \
+  --output-dir /tmp/finsage_baseline_eval \
+  --backend mock --max-examples 20
+```
+
+**Real run:**
+
+```bash
+pip install -e ".[ml,training]"
+python evaluation/run_baseline_eval.py \
+  --test-file data/datasets/test.jsonl \
+  --model-id mistralai/Mistral-7B-Instruct-v0.3 \
+  --output-dir reports/figures \
+  --backend transformers --device auto --load-in-4bit --max-examples 200
+```
+
+`make eval-baseline` (mock) / `make eval-baseline-real` (GPU) run the defaults.
+
+**Outputs** (in `reports/figures/`, plus the Markdown report):
+`baseline_predictions.jsonl`, `baseline_results.json`,
+`baseline_metrics_by_task.json`, and
+[reports/baseline_eval_report.md](reports/baseline_eval_report.md).
+
+**Per-task metrics:** exact match / token F1 (QA), ROUGE-L (summary/explanation
+tasks), numeric match (metric extraction), classification accuracy
+(outlook/hallucination), and a lightweight `lexical_faithfulness` proxy (a real
+NLI/LLM-judge metric replaces it later). See
+[docs/eval_guide.md](docs/eval_guide.md).
 
 ## Evaluation plan
 

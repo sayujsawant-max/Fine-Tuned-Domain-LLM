@@ -41,6 +41,12 @@ def processed_manifest_path() -> Path:
 
 
 @pytest.fixture
+def eval_test_file() -> Path:
+    """Return the path to the sample evaluation test set fixture."""
+    return FIXTURES_DIR / "eval_test_sample.jsonl"
+
+
+@pytest.fixture
 def mock_transport() -> httpx.MockTransport:
     """Return a MockTransport routing SEC URLs to local fixtures."""
     tickers = _load_fixture("company_tickers_sample.json")

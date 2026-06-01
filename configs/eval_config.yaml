@@ -1,4 +1,28 @@
-# Evaluation configuration for FinSage-7B (Phases 5 & 7).
+# Evaluation configuration for FinSage-7B (Phases 4, 5 & 7).
+
+baseline:
+  model_id: mistralai/Mistral-7B-Instruct-v0.3
+  backend: mock
+  test_file: data/datasets/test.jsonl
+  output_dir: reports/figures
+  max_examples: 200
+  batch_size: 1
+  max_new_tokens: 256
+  temperature: 0.0
+  top_p: 1.0
+  device: auto
+  load_in_4bit: true
+  save_every: 25
+
+metrics:
+  enabled:
+    - exact_match
+    - token_f1
+    - rouge_l
+    - numeric_match
+    - classification_accuracy
+    - lexical_faithfulness
+
 models:
   base:
     name: base-mistral-7b

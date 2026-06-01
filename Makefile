@@ -3,8 +3,8 @@ PYTHON ?= python
 
 .PHONY: help install install-dev install-ml install-training install-serving \
         lint format typecheck test check download-data extract-sections \
-        build-dataset validate-dataset train eval-baseline eval-finetuned serve-api \
-        serve-vllm docker-build docker-up report
+        build-dataset validate-dataset train eval-baseline eval-baseline-real \
+        eval-finetuned serve-api serve-vllm docker-build docker-up report
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -74,10 +74,13 @@ validate-dataset: ## Validate the instruction dataset splits
 train: ## Run QLoRA fine-tuning (requires training extras)
 	$(PYTHON) training/train.py
 
-eval-baseline: ## Evaluate the base model (requires ml extras)
-	$(PYTHON) evaluation/run_baseline_eval.py
+eval-baseline: ## Baseline eval with the mock backend (no model download)
+	$(PYTHON) evaluation/run_baseline_eval.py --test-file data/datasets/test.jsonl --output-dir reports/figures --backend mock --max-examples 50
 
-eval-finetuned: ## Evaluate the fine-tuned model (requires ml extras)
+eval-baseline-real: ## Baseline eval with the real base model (requires ml,training extras + GPU)
+	$(PYTHON) evaluation/run_baseline_eval.py --test-file data/datasets/test.jsonl --output-dir reports/figures --backend transformers --model-id mistralai/Mistral-7B-Instruct-v0.3 --max-examples 200 --device auto --load-in-4bit
+
+eval-finetuned: ## Evaluate the fine-tuned model (Phase 7, requires ml extras)
 	$(PYTHON) evaluation/run_finetuned_eval.py
 
 report: ## Generate the benchmark comparison report

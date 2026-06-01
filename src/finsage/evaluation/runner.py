@@ -1,60 +1,174 @@
-"""Evaluation orchestration (Phase 5 & 7).
+"""Evaluation orchestration (Phase 4 baseline).
 
-:class:`EvalRunner` ties together a model under test, a test dataset, and the
-metric functions in :mod:`finsage.evaluation.metrics`. Phase 1 ships the config
-loading and result-shaping scaffold; model generation is wired up in Phase 5.
+:class:`EvalRunner` drives a :class:`~finsage.evaluation.generators.BaseGenerator`
+over a JSONL test set: it builds prompts, generates and normalises predictions,
+computes per-example metrics, aggregates them, and writes the baseline outputs.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from finsage.evaluation.generators import BaseGenerator
+from finsage.evaluation.metrics import aggregate_metrics, compute_metrics_for_example
+from finsage.evaluation.prompts import normalize_prediction
 from finsage.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+_PREVIEW_CHARS = 200
 
-@dataclass
+
 class EvalRunner:
-    """Runs an evaluation pass over a test set for one model.
+    """Runs a generator over a test set and writes baseline evaluation outputs.
 
     Args:
-        config_path: Path to the evaluation YAML config.
-        model_name: Logical name of the model under test (e.g. ``"base-mistral-7b"``).
+        generator: The prediction generator (mock or transformers).
+        output_dir: Directory for prediction/metric outputs.
+        save_every: Checkpoint predictions to disk every N examples.
     """
 
-    config_path: str | Path = "configs/eval_config.yaml"
-    model_name: str = "base-mistral-7b"
-    _config: dict[str, Any] = field(init=False, default_factory=dict)
+    def __init__(
+        self,
+        generator: BaseGenerator,
+        output_dir: Path | str = "reports/figures",
+        save_every: int = 25,
+    ) -> None:
+        self.generator = generator
+        self.output_dir = Path(output_dir)
+        self.save_every = max(1, save_every)
 
-    def load_config(self) -> dict[str, Any]:
-        """Load the evaluation config from disk.
+    def load_examples(
+        self, test_file: Path | str, max_examples: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Load JSONL test examples.
 
-        Returns:
-            The parsed config mapping.
-
-        Raises:
-            FileNotFoundError: If the config file is missing.
-        """
-        p = Path(self.config_path)
-        if not p.exists():
-            raise FileNotFoundError(f"Eval config not found: {p}")
-        with p.open("r", encoding="utf-8") as fh:
-            self._config = dict(yaml.safe_load(fh) or {})
-        return self._config
-
-    def run(self) -> dict[str, Any]:
-        """Run the evaluation and return aggregated metrics.
+        Args:
+            test_file: Path to the JSONL test set.
+            max_examples: Optional cap on the number of examples loaded.
 
         Returns:
-            A results mapping keyed by task type.
+            The loaded examples.
 
         Raises:
-            NotImplementedError: Always, until Phase 5. Model generation requires
-                the ``ml`` (and, for the fine-tuned model, ``training``) extras.
+            FileNotFoundError: If the test file does not exist.
         """
-        raise NotImplementedError("EvalRunner.run lands in Phase 5 (install the 'ml' extras).")
+        path = Path(test_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Test file not found: {path}")
+        examples: list[dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                examples.append(json.loads(line))
+                if max_examples is not None and len(examples) >= max_examples:
+                    break
+        logger.info("Loaded %d example(s) from %s", len(examples), path)
+        return examples
+
+    def evaluate_examples(self, examples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Generate predictions and compute metrics for each example.
+
+        Args:
+            examples: The examples to evaluate.
+
+        Returns:
+            Result rows with ``id``, ``task_type``, ``instruction``,
+            ``input_preview``, ``reference``, ``prediction``, ``metrics``, and
+            ``metadata``.
+        """
+        rows: list[dict[str, Any]] = []
+        for index, example in enumerate(examples, start=1):
+            raw = self.generator.generate(example)
+            prediction = normalize_prediction(raw)
+            metrics = compute_metrics_for_example(example, prediction)
+            input_text = str(example.get("input", ""))
+            rows.append(
+                {
+                    "id": example.get("id", f"example-{index}"),
+                    "task_type": example.get("task_type", "unknown"),
+                    "instruction": example.get("instruction", ""),
+                    "input_preview": input_text[:_PREVIEW_CHARS],
+                    "reference": example.get("output", ""),
+                    "prediction": prediction,
+                    "metrics": metrics,
+                    "metadata": example.get("metadata", {}),
+                }
+            )
+            if index % self.save_every == 0:
+                self.save_predictions(rows, self.output_dir / "baseline_predictions.jsonl")
+                logger.info("Checkpointed %d/%d predictions", index, len(examples))
+        return rows
+
+    def save_predictions(self, rows: list[dict[str, Any]], path: Path | str) -> Path:
+        """Write prediction rows as JSONL.
+
+        Args:
+            rows: The result rows.
+            path: Destination path.
+
+        Returns:
+            The path written to.
+        """
+        out_path = Path(path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return out_path
+
+    def save_metrics(self, metrics: dict[str, Any], path: Path | str) -> Path:
+        """Write a metrics mapping as JSON.
+
+        Args:
+            metrics: The metrics to write.
+            path: Destination path.
+
+        Returns:
+            The path written to.
+        """
+        out_path = Path(path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+        return out_path
+
+    def run(self, test_file: Path | str, max_examples: int | None = None) -> dict[str, Any]:
+        """Run the full evaluation and write all baseline outputs.
+
+        Args:
+            test_file: Path to the JSONL test set.
+            max_examples: Optional cap on the number of examples.
+
+        Returns:
+            The aggregated results dict, augmented with run metadata and the
+            output paths.
+        """
+        examples = self.load_examples(test_file, max_examples=max_examples)
+        rows = self.evaluate_examples(examples)
+        aggregate = aggregate_metrics(rows)
+
+        results: dict[str, Any] = {
+            "backend": getattr(self.generator, "name", type(self.generator).__name__),
+            "model_id": getattr(self.generator, "model_id", None),
+            "test_file": str(test_file),
+            "num_examples": len(rows),
+            **aggregate,
+        }
+
+        preds_path = self.save_predictions(rows, self.output_dir / "baseline_predictions.jsonl")
+        results_path = self.save_metrics(results, self.output_dir / "baseline_results.json")
+        by_task_path = self.save_metrics(
+            aggregate["by_task"], self.output_dir / "baseline_metrics_by_task.json"
+        )
+
+        results["paths"] = {
+            "predictions": str(preds_path),
+            "results": str(results_path),
+            "metrics_by_task": str(by_task_path),
+        }
+        logger.info("Baseline evaluation complete: %d example(s)", len(rows))
+        return results
