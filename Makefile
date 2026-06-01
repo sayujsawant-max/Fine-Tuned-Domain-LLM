@@ -5,8 +5,9 @@ PYTHON ?= python
         lint format typecheck test check download-data extract-sections \
         build-dataset validate-dataset train-dry-run train merge-adapter \
         eval-baseline eval-baseline-real eval-finetuned eval-finetuned-adapter \
-        eval-finetuned-merged compare-models serve-api serve-vllm \
-        docker-build docker-up report
+        eval-finetuned-merged compare-models serve-api serve-vllm serve-vllm-lora \
+        test-vllm benchmark-vllm docker-build docker-up docker-build-serving \
+        docker-up-serving report
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -103,19 +104,34 @@ compare-models: ## Compare existing baseline/fine-tuned outputs into a benchmark
 report: compare-models ## Alias for compare-models
 
 # ---------------------------------------------------------------------------
-# Serving (Phase 8-9)
+# Serving (Phase 7: vLLM)
 # ---------------------------------------------------------------------------
-serve-api: ## Run the FastAPI service
+serve-api: ## Run the FastAPI service (Phase 8)
 	$(PYTHON) -m uvicorn finsage.serving.app:app --host $${API_HOST:-localhost} --port $${API_PORT:-8080}
 
-serve-vllm: ## Start the vLLM OpenAI-compatible server
+serve-vllm: ## Start the vLLM OpenAI-compatible server (merged model, GPU)
 	bash serving/vllm_server.sh
 
+serve-vllm-lora: ## Serve base model + LoRA adapter directly (optional, GPU)
+	bash serving/vllm_lora_server.sh
+
+test-vllm: ## Smoke-test a running vLLM endpoint
+	$(PYTHON) serving/test_endpoint.py all --base-url http://localhost:8000/v1 --model finsage-7b
+
+benchmark-vllm: ## Benchmark vLLM latency -> reports/figures/vllm_latency_benchmark.json
+	$(PYTHON) serving/benchmark_latency.py --base-url http://localhost:8000/v1 --model finsage-7b --num-requests 20 --concurrency 1 --output-path reports/figures/vllm_latency_benchmark.json
+
 # ---------------------------------------------------------------------------
-# Docker (Phase 11)
+# Docker
 # ---------------------------------------------------------------------------
 docker-build: ## Build Docker images
 	docker compose -f docker/docker-compose.yml build
 
 docker-up: ## Start the Docker stack
 	docker compose -f docker/docker-compose.yml up
+
+docker-build-serving: ## Build the vLLM serving image (GPU)
+	docker build -f docker/Dockerfile.serving -t finsage-vllm:latest .
+
+docker-up-serving: ## Start only the vLLM service (GPU)
+	docker compose -f docker/docker-compose.yml up vllm

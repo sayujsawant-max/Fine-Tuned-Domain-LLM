@@ -39,6 +39,7 @@ Thumbs.db
 # Project artifacts (large / generated) — kept out of git
 # ---------------------------------------------------------------------------
 checkpoints/
+models/
 wandb/
 mlruns/
 runs/

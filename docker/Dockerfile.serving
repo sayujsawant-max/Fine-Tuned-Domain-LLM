@@ -1,20 +1,39 @@
-# vLLM serving image for FinSage-7B (GPU). PLACEHOLDER — finalised in Phase 8.
+# vLLM serving image for FinSage-7B (Phase 7).
 #
-# vLLM requires CUDA. Build/run this on a GPU host with the NVIDIA Container
-# Toolkit installed. The official vLLM image is the simplest starting point:
+# REQUIRES an NVIDIA GPU at runtime + the NVIDIA Container Toolkit:
+#   docker run --gpus all ...   (or `deploy.resources` in docker-compose.yml)
 #
-#   FROM vllm/vllm-openai:latest
-#   # The merged model is mounted at runtime (see docker-compose.yml), e.g.
-#   #   -v $(pwd)/checkpoints:/checkpoints
-#   ENTRYPOINT ["python", "-m", "vllm.entrypoints.openai.api_server", \
-#               "--model", "/checkpoints/finsage-7b-merged", \
-#               "--served-model-name", "finsage-7b", \
-#               "--host", "0.0.0.0", "--port", "8000"]
-#
-# Kept as a placeholder so the default (CPU) build does not pull CUDA layers.
-FROM python:3.11-slim
+# vLLM is tightly coupled to specific CUDA/torch versions. This image pins a
+# CUDA 12.1 runtime base; if `pip install vllm` resolves a wheel built for a
+# different CUDA, either switch the base tag to match (e.g. cuda:12.4.x) or use
+# the official `vllm/vllm-openai:latest` image and mount the merged model.
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
-RUN echo "FinSage-7B vLLM serving image is a Phase 8 placeholder. See comments above." \
-    && echo "Build the real GPU image from vllm/vllm-openai:latest."
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-CMD ["python", "-c", "print('Phase 8 placeholder — build the GPU vLLM image.')"]
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install the package with the serving extra (pulls vLLM). Copy metadata + source
+# first for better layer caching.
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python3 -m pip install --upgrade pip && python3 -m pip install -e ".[serving]"
+
+# Serving scripts + configs.
+COPY serving ./serving
+COPY configs ./configs
+RUN chmod +x serving/vllm_server.sh serving/vllm_lora_server.sh
+
+EXPOSE 8000
+
+# The merged model is mounted at runtime (see docker-compose.yml):
+#   -v $(pwd)/checkpoints/finsage-7b-merged:/models/finsage-7b-merged:ro
+# and MODEL_PATH points at it.
+CMD ["bash", "serving/vllm_server.sh"]

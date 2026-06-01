@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 6 — Fine-tuned evaluation & before/after benchmark ✅** (mock comparison is CPU-only; real adapter/merged eval is GPU-bound)
+**Current status: Phase 7 — vLLM serving ✅** (client/health/benchmark + tests are CPU-only; serving the model needs a GPU)
 
 ---
 
@@ -51,7 +51,7 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 4 | Baseline evaluation (base Mistral-7B, mock + real backends) | ✅ Done |
 | 5 | QLoRA fine-tuning pipeline (dry-run + real) | ✅ Done |
 | 6 | Fine-tuned evaluation + before/after benchmark | ✅ Done |
-| 7 | vLLM serving | ⏳ Planned |
+| 7 | vLLM OpenAI-compatible serving | ✅ Done |
 | 8 | FastAPI backend (auth, logging, disclaimer) | ⏳ Planned |
 | 9 | Frontend demo | ⏳ Planned |
 | 10 | Docker + deployment | ⏳ Planned |
@@ -429,6 +429,69 @@ LLM-judge). See [docs/eval_guide.md](docs/eval_guide.md) and
   safety checks, and mandatory disclaimer injection.
 
 See [docs/deployment_guide.md](docs/deployment_guide.md).
+
+## vLLM serving (Phase 7)
+
+Serve the merged FinSage-7B as an **OpenAI-compatible** API with vLLM. This phase
+is the inference engine only — the public FastAPI wrapper (auth, logging,
+disclaimer) is **Phase 8**.
+
+> **GPU required.** vLLM needs CUDA; it won't run on CPU/macOS/Windows. The
+> client, health, and benchmark tooling (and all tests) are CPU-only.
+>
+> ⚠️ **Do not expose the vLLM port publicly** — it has no auth. Phase 8 adds the
+> wrapper.
+
+**1. Install + ensure a merged model exists:**
+
+```bash
+pip install -e ".[serving]"
+# Merge the trained adapter if you haven't already:
+python training/merge_adapter.py \
+  --base-model mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter-path checkpoints/finsage-7b \
+  --output-dir checkpoints/finsage-7b-merged
+```
+
+**2. Start the server** (`make serve-vllm`):
+
+```bash
+MODEL_PATH=checkpoints/finsage-7b-merged SERVED_MODEL_NAME=finsage-7b \
+  bash serving/vllm_server.sh
+```
+
+**3. Test the endpoint** (`make test-vllm`):
+
+```bash
+python serving/test_endpoint.py all --base-url http://localhost:8000/v1 --model finsage-7b
+# raw curl:
+curl http://localhost:8000/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "finsage-7b",
+  "messages": [{"role":"user","content":"Summarize the key risk factors: competition, supply chain, regulation."}],
+  "temperature": 0.0, "max_tokens": 256 }'
+```
+
+**4. Benchmark latency** (`make benchmark-vllm`):
+
+```bash
+python serving/benchmark_latency.py --base-url http://localhost:8000/v1 \
+  --model finsage-7b --num-requests 20 --concurrency 1 \
+  --output-path reports/figures/vllm_latency_benchmark.json
+```
+
+**Docker (GPU + NVIDIA Container Toolkit):**
+
+```bash
+docker build -f docker/Dockerfile.serving -t finsage-vllm:latest .
+docker compose -f docker/docker-compose.yml up vllm
+```
+
+**Troubleshooting:** CUDA OOM → lower `GPU_MEMORY_UTILIZATION`/`MAX_MODEL_LEN`;
+`Merged model not found` → run `merge_adapter.py` or set `MODEL_PATH`; `vllm not
+found` → `pip install -e ".[serving]"`; gated base model → set `HF_TOKEN`; port
+8000 in use → change `VLLM_PORT`; missing chat template → use the merged model
+(it ships the tokenizer); slow startup → 7B weights take time to load (poll
+`/v1/models`). See [docs/deployment_guide.md](docs/deployment_guide.md).
 
 ## Deployment plan
 

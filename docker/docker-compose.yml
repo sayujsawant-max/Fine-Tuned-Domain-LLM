@@ -1,5 +1,6 @@
-# FinSage-7B stack. Phase 1 ships the CPU `api` service; `vllm` and `frontend`
-# are scaffolded but commented out until Phases 8 and 10.
+# FinSage-7B stack. The CPU `api` service runs anywhere; the `vllm` service
+# (Phase 7) requires an NVIDIA GPU + the NVIDIA Container Toolkit. The `frontend`
+# service is scaffolded for Phase 9.
 services:
   api:
     build:
@@ -18,26 +19,46 @@ services:
       # VLLM_PORT: "8000"
     restart: unless-stopped
 
-  # --- Phase 8: vLLM inference server (GPU) -------------------------------
-  # vllm:
-  #   build:
-  #     context: ..
-  #     dockerfile: docker/Dockerfile.serving
-  #   image: finsage-vllm:latest
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ../checkpoints:/checkpoints
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   restart: unless-stopped
+  # --- Phase 7: vLLM inference server (GPU) -------------------------------
+  # Requires an NVIDIA GPU and the NVIDIA Container Toolkit. Mount the merged
+  # model read-only at /models/finsage-7b-merged.
+  vllm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.serving
+    image: finsage-vllm:latest
+    container_name: finsage-vllm
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_PATH: /models/finsage-7b-merged
+      SERVED_MODEL_NAME: finsage-7b
+      VLLM_HOST: 0.0.0.0
+      VLLM_PORT: "8000"
+      DTYPE: auto
+      MAX_MODEL_LEN: "4096"
+      GPU_MEMORY_UTILIZATION: "0.90"
+    volumes:
+      - ../checkpoints/finsage-7b-merged:/models/finsage-7b-merged:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+    restart: unless-stopped
+    # GPU reservation (Compose v2 spec). If your Compose/daemon does not support
+    # `deploy.resources`, run instead with: `docker run --gpus all ...`, or set
+    # the default Docker runtime to `nvidia`.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
-  # --- Phase 10: frontend demo -------------------------------------------
+  # --- Phase 9: frontend demo --------------------------------------------
   # frontend:
   #   build:
   #     context: ..

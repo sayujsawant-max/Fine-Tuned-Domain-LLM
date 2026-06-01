@@ -1,8 +1,17 @@
-"""FastAPI serving layer for FinSage-7B."""
+"""Serving layer for FinSage-7B: vLLM client/health helpers and the FastAPI app."""
 
 from __future__ import annotations
 
-__all__ = ["create_app"]
+from finsage.serving.health import check_openai_compatible_health, wait_for_vllm
+from finsage.serving.vllm_client import VLLMClient, VLLMClientError
+
+__all__ = [
+    "VLLMClient",
+    "VLLMClientError",
+    "check_openai_compatible_health",
+    "create_app",
+    "wait_for_vllm",
+]
 
 
 def __getattr__(name: str) -> object:

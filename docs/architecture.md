@@ -26,6 +26,25 @@ FastAPI Wrapper (finsage.serving.app)  [auth, logging, disclaimer, safety]
 Frontend Demo (frontend/)
 ```
 
+## Phase 7 — serving (current)
+
+```
+Merged FinSage-7B model (checkpoints/finsage-7b-merged)
+        ↓
+vLLM OpenAI-compatible server (serving/vllm_server.sh)
+        ↓
+/v1/models   (health)
+/v1/chat/completions   (inference)
+        ↓
+VLLMClient + health helpers (finsage.serving.vllm_client / health)
+Smoke tests (serving/test_endpoint.py) + latency benchmark (serving/benchmark_latency.py)
+        ↓
+Phase 8 FastAPI wrapper  [auth, logging, disclaimer, rate limiting]  ← public surface
+```
+
+The vLLM endpoint is **internal** (no auth/disclaimer); Phase 8's FastAPI
+wrapper is the only intended-public surface.
+
 ## Components
 
 | Layer | Module / path | Responsibility |
