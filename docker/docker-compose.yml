@@ -1,6 +1,6 @@
-# FinSage-7B stack. The CPU `api` service runs anywhere; the `vllm` service
-# (Phase 7) requires an NVIDIA GPU + the NVIDIA Container Toolkit. The `frontend`
-# service is scaffolded for Phase 9.
+# FinSage-7B stack. The CPU `api` and `frontend` services run anywhere; the
+# `vllm` service (Phase 7) requires an NVIDIA GPU + the NVIDIA Container Toolkit.
+# Topology: browser → frontend (:3000) → api (:8080) → vllm (:8000) → model.
 services:
   api:
     build:
@@ -71,14 +71,23 @@ services:
               count: 1
               capabilities: [gpu]
 
-  # --- Phase 9: frontend demo --------------------------------------------
-  # frontend:
-  #   build:
-  #     context: ..
-  #     dockerfile: docker/Dockerfile.frontend
-  #   image: finsage-frontend:latest
-  #   ports:
-  #     - "8501:8501"
-  #   depends_on:
-  #     - api
-  #   restart: unless-stopped
+  # --- Phase 9: frontend demo (Next.js, CPU) -----------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    image: finsage-frontend:latest
+    container_name: finsage-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Server-side only — the API secret is never sent to the browser.
+      API_BASE_URL: http://api:8080/v1
+      API_SECRET_KEY: change-me
+      # With a live backend behind the proxy, disable demo fallback.
+      NEXT_PUBLIC_DEMO_MODE: "false"
+      NEXT_PUBLIC_APP_NAME: FinSage-7B
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

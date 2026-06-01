@@ -70,3 +70,12 @@ data/datasets/*
 # Generated report figures
 reports/figures/*
 !reports/figures/.gitkeep
+
+# ---------------------------------------------------------------------------
+# Frontend (Phase 9: Next.js demo)
+# ---------------------------------------------------------------------------
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/coverage/

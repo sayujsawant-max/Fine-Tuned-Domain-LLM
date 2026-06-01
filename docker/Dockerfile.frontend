@@ -1,9 +1,32 @@
-# Frontend demo image for FinSage-7B. PLACEHOLDER — finalised in Phase 10.
-#
-# The demo stack (Streamlit or Next.js) is decided in Phase 10. This placeholder
-# keeps the compose file complete without pulling a heavy toolchain early.
-FROM python:3.11-slim
-
+# Frontend demo image for FinSage-7B (Next.js, CPU-only).
+# Build context is the `frontend/` directory (see docker-compose.yml).
+FROM node:20-alpine AS deps
 WORKDIR /app
+COPY package.json package-lock.json* ./
+# Use a clean install when a lockfile exists; fall back to install otherwise.
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-CMD ["python", "-c", "print('Phase 10 placeholder — frontend demo not built yet.')"]
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000
+# Copy the built app and production dependencies.
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.mjs ./next.config.mjs
+
+EXPOSE 3000
+
+# API_BASE_URL and API_SECRET_KEY are provided at runtime (compose / platform).
+# The API secret stays server-side; it is only used by the /api proxy routes.
+CMD ["npm", "run", "start"]

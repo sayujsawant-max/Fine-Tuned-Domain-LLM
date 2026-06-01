@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 8 — FastAPI backend wrapper ✅** (auth, rate limiting, structured logging, disclaimer injection; CPU-only and fully tested with a mocked vLLM backend)
+**Current status: Phase 9 — Frontend demo ✅** (Next.js + TypeScript + Tailwind; recruiter-friendly, works in demo mode with no backend, calls the Phase 8 API via a server-side proxy that keeps the API key private)
 
 ---
 
@@ -53,7 +53,7 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 6 | Fine-tuned evaluation + before/after benchmark | ✅ Done |
 | 7 | vLLM OpenAI-compatible serving | ✅ Done |
 | 8 | FastAPI backend (auth, rate limiting, logging, disclaimer) | ✅ Done |
-| 9 | Frontend demo | ⏳ Planned |
+| 9 | Frontend demo (Next.js + TypeScript + Tailwind) | ✅ Done |
 | 10 | Docker + deployment | ⏳ Planned |
 | 11 | Benchmark PDF + Hugging Face publishing | ⏳ Planned |
 
@@ -600,11 +600,96 @@ make docker-up-api
 | `422` on `/v1/chat` | Validation — empty `question`/`filing_excerpt`, bad `task_type`, or out-of-range `max_tokens`/`temperature`. |
 | `400` on `/v1/chat/completions` | `stream:true` is not supported in Phase 8. |
 
+## Phase 9: Frontend Demo
+
+A polished, recruiter-friendly [Next.js](frontend/) demo (App Router, TypeScript,
+Tailwind) that lets anyone analyze a filing excerpt in under 30 seconds. It shows
+the answer, model, task type, latency, request ID, and the mandatory disclaimer —
+plus an optional base-Mistral-vs-FinSage comparison, a benchmark summary, and an
+architecture flow.
+
+**The browser never sees the API key.** The page calls a server-side Next.js
+proxy (`/api/chat`), which injects `X-API-Key` from a server-only env var and
+forwards to the Phase 8 FastAPI backend:
+
+```
+Browser → Next.js /api/chat proxy → FastAPI (:8080) → vLLM (:8000) → FinSage-7B
+```
+
+### Run it locally
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev            # http://localhost:3000
+```
+
+**Demo mode (no backend needed)** — the proxy returns a deterministic, clearly
+labelled mock when the backend is unreachable:
+
+```bash
+NEXT_PUBLIC_DEMO_MODE=true npm run dev
+```
+
+**With the live FastAPI backend** (start vLLM + the API first — see Phase 8):
+
+```bash
+API_BASE_URL=http://localhost:8080/v1 \
+API_SECRET_KEY=change-me \
+NEXT_PUBLIC_DEMO_MODE=false \
+npm run dev
+```
+
+### Environment variables
+
+| Variable | Scope | Purpose |
+|----------|-------|---------|
+| `API_BASE_URL` | server-only | Backend base URL the proxy forwards to |
+| `API_SECRET_KEY` | server-only | Injected as `X-API-Key`; **never** sent to the browser |
+| `NEXT_PUBLIC_API_BASE_URL` | public | Display/health only |
+| `NEXT_PUBLIC_DEMO_MODE` | public | `true` → mock fallback when backend is down |
+| `NEXT_PUBLIC_APP_NAME` | public | App title |
+
+> Never put production secrets in `NEXT_PUBLIC_*` — those are inlined into the
+> browser bundle.
+
+### Test / build
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm run test          # vitest (no backend, no vLLM, no network)
+npm run build
+```
+
+### Docker
+
+```bash
+make docker-build-frontend
+make docker-up-frontend     # starts api + vllm via depends_on
+# or the whole stack:
+make docker-up-full
+```
+
+> **Screenshots:** add demo captures under `reports/figures/` (e.g.
+> `frontend_demo.png`) and embed them here.
+
+### 30-second recruiter demo
+
+1. Open the demo → click **Load sample → Risk Factors**.
+2. Leave the task on **Risk Summary**, click **Analyze Filing**.
+3. Read the grounded answer, latency, and disclaimer; tick **Compare vs base
+   Mistral** to show why fine-tuning matters.
+
+Full script: [reports/demo_script.md](reports/demo_script.md).
+
 ## Deployment plan
 
-Docker Compose orchestrates the stack: `api` (public FastAPI, CPU) depends on
-`vllm` (internal inference, GPU), with `frontend` scaffolded for Phase 9. See
-[docker/](docker/) and [docs/deployment_guide.md](docs/deployment_guide.md).
+Docker Compose orchestrates the stack: `frontend` (Next.js, CPU) → `api` (public
+FastAPI, CPU) → `vllm` (internal inference, GPU). See [docker/](docker/) and
+[docs/deployment_guide.md](docs/deployment_guide.md).
 
 ## ⚠️ Disclaimer — not financial advice
 

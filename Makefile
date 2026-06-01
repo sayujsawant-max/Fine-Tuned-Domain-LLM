@@ -7,7 +7,9 @@ PYTHON ?= python
         eval-baseline eval-baseline-real eval-finetuned eval-finetuned-adapter \
         eval-finetuned-merged compare-models serve-api serve-vllm serve-vllm-lora \
         test-vllm test-api-server benchmark-vllm docker-build docker-up docker-build-serving \
-        docker-up-serving docker-build-api docker-up-api docker-up-full report
+        docker-up-serving docker-build-api docker-up-api docker-up-full report \
+        frontend-install frontend-dev frontend-build frontend-lint frontend-test \
+        frontend-typecheck docker-build-frontend docker-up-frontend check-full
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -55,6 +57,11 @@ check: lint typecheck test ## Run lint + typecheck + tests (+ dataset validation
 			--test-path data/datasets/test.jsonl \
 			--report-path data/datasets/validation_report.json; \
 	else echo "No dataset built; skipping dataset validation."; fi
+
+check-full: check ## Backend check + frontend checks (requires frontend deps installed)
+	@if [ -d frontend/node_modules ]; then \
+		$(MAKE) frontend-lint frontend-typecheck frontend-test; \
+	else echo "frontend/node_modules missing; run 'make frontend-install' first."; fi
 
 # ---------------------------------------------------------------------------
 # Data pipeline (Phase 2-4)
@@ -145,5 +152,32 @@ docker-build-api: ## Build the FastAPI wrapper image (CPU)
 docker-up-api: ## Start the API service (starts vLLM via depends_on)
 	docker compose -f docker/docker-compose.yml up api
 
-docker-up-full: ## Start the full stack (vLLM + API)
+docker-up-full: ## Start the full stack (vLLM + API + frontend)
 	docker compose -f docker/docker-compose.yml up
+
+# ---------------------------------------------------------------------------
+# Frontend (Phase 9: Next.js demo)
+# ---------------------------------------------------------------------------
+frontend-install: ## Install frontend npm dependencies
+	cd frontend && npm install
+
+frontend-dev: ## Run the Next.js dev server (http://localhost:3000)
+	cd frontend && npm run dev
+
+frontend-build: ## Build the production frontend
+	cd frontend && npm run build
+
+frontend-lint: ## Lint the frontend
+	cd frontend && npm run lint
+
+frontend-test: ## Run frontend unit tests (vitest)
+	cd frontend && npm run test
+
+frontend-typecheck: ## Type-check the frontend (tsc --noEmit)
+	cd frontend && npm run typecheck
+
+docker-build-frontend: ## Build the frontend Docker image
+	docker build -f docker/Dockerfile.frontend -t finsage-frontend:latest frontend
+
+docker-up-frontend: ## Start the frontend service (starts api+vllm via depends_on)
+	docker compose -f docker/docker-compose.yml up frontend

@@ -105,6 +105,60 @@ set the default Docker runtime to `nvidia`. vLLM is pinned to a CUDA base image;
 if `pip install vllm` resolves a wheel for a different CUDA, match the base tag
 or use the official `vllm/vllm-openai` image and mount the model.
 
+## Phase 9 — frontend deployment
+
+The [Next.js frontend](../frontend/) is a CPU-only static UI plus two server-side
+proxy routes (`/api/chat`, `/api/health`). **The API secret never reaches the
+browser** — it is read server-side from `API_SECRET_KEY` and injected as the
+`X-API-Key` header by the proxy. Anything prefixed `NEXT_PUBLIC_*` is public.
+
+### Environment variables
+
+| Variable | Scope | Purpose |
+|----------|-------|---------|
+| `API_BASE_URL` | server-only | Backend base URL the proxy forwards to (e.g. `http://api:8080/v1`) |
+| `API_SECRET_KEY` | server-only | Injected as `X-API-Key`; never bundled into client code |
+| `NEXT_PUBLIC_API_BASE_URL` | public | Display / health only |
+| `NEXT_PUBLIC_DEMO_MODE` | public | `true` → return a labelled mock when the backend is unreachable |
+| `NEXT_PUBLIC_APP_NAME` | public | App title |
+
+### Demo mode vs real backend mode
+
+- **Demo mode** (`NEXT_PUBLIC_DEMO_MODE=true`): if the backend is down, the proxy
+  returns a deterministic mock clearly marked "Demo mode response." Ideal for
+  static hosting and recruiter links with no GPU/backend running.
+- **Real backend mode** (`NEXT_PUBLIC_DEMO_MODE=false`): the proxy forwards to the
+  FastAPI wrapper and surfaces real errors (401/429/503) instead of mocking.
+
+### Vercel (or any Node host)
+
+1. Set the project root to `frontend/`.
+2. Configure env vars: `API_BASE_URL`, `API_SECRET_KEY` (as **encrypted/secret**,
+   not `NEXT_PUBLIC_*`), and `NEXT_PUBLIC_DEMO_MODE`.
+3. Deploy. The `/api/*` routes run as serverless functions and hold the secret
+   server-side. Point `API_BASE_URL` at your **HTTPS** FastAPI endpoint.
+
+### Docker
+
+```bash
+make docker-build-frontend         # docker build -f docker/Dockerfile.frontend -t finsage-frontend:latest frontend
+make docker-up-frontend            # starts api + vllm via depends_on
+```
+
+The compose `frontend` service publishes `:3000`, sets `API_BASE_URL=http://api:8080/v1`
+and `API_SECRET_KEY` (server-side), and `depends_on` the API being healthy. Only
+the frontend port should be exposed publicly; keep the API and vLLM on the
+private network.
+
+### Frontend production notes
+
+- Serve over **HTTPS** (Vercel/edge or a reverse proxy with TLS).
+- Set a **real `API_SECRET_KEY`** server-side; never as `NEXT_PUBLIC_*`.
+- **Restrict CORS** on the FastAPI side to the frontend origin.
+- **Do not expose vLLM** — only the frontend (and optionally the API) is public.
+- The browser bundle contains no secret; verify with `grep -r NEXT_PUBLIC frontend`
+  and confirm no key material is referenced client-side.
+
 ## OpenAI-compatible API usage
 
 ```bash

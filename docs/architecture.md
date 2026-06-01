@@ -26,7 +26,28 @@ FastAPI Wrapper (finsage.serving.app)  [auth, logging, disclaimer, safety]
 Frontend Demo (frontend/)
 ```
 
-## Phase 8 — public API wrapper (current)
+## Phase 9 — frontend demo (current)
+
+```
+User Browser
+   ↓
+Next.js Frontend (frontend/, :3000)            ← static UI + client components
+   ↓
+Next.js /api/chat Proxy (server-side route)    ← injects X-API-Key (secret stays server-side)
+   ↓
+FastAPI Wrapper (:8080)
+   ↓
+vLLM Server (:8000, internal)
+   ↓
+FinSage-7B Model
+```
+
+The frontend never holds the API secret: the browser calls the same-origin
+`/api/chat` route, which runs server-side and adds the `X-API-Key` header from a
+server-only environment variable. Demo mode returns a labelled mock when the
+backend is unreachable, so the UI is fully explorable with no services running.
+
+## Phase 8 — public API wrapper
 
 ```
 User / Frontend / API client
@@ -70,6 +91,7 @@ Smoke tests (serving/test_endpoint.py) + latency benchmark (serving/benchmark_la
 | Training | `finsage.training.*` | QLoRA trainer, collator, callbacks |
 | Evaluation | `finsage.evaluation.*` | Metrics, runner, judge, report |
 | Serving | `finsage.serving.*` | FastAPI app, routes, middleware, schemas |
+| Frontend | `frontend/` | Next.js demo + server-side `/api/chat` proxy (keeps API key private) |
 
 ## Boundaries
 
