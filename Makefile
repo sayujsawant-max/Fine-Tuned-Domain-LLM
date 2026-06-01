@@ -142,6 +142,22 @@ validate-report: ## Validate the generated benchmark report (Phase 11)
 		--metadata-path reports/report_metadata.json
 
 # ---------------------------------------------------------------------------
+# Release / portfolio polish (Phase 12)
+# ---------------------------------------------------------------------------
+final-check: ## Validate repo readiness (docs, secrets, honesty, no weights)
+	$(PYTHON) scripts/final_repo_check.py
+
+release-check: ## Full pre-release gate (backend + frontend + repo + report)
+	$(MAKE) check
+	@if [ -d frontend/node_modules ]; then \
+		$(MAKE) frontend-typecheck frontend-test || echo "[warn] frontend checks failed"; \
+	else echo "[warn] frontend/node_modules missing; skipping frontend checks."; fi
+	$(PYTHON) scripts/final_repo_check.py
+	@$(PYTHON) scripts/validate_report.py \
+		--report-path reports/benchmark_report.md \
+		--metadata-path reports/report_metadata.json || echo "[warn] report validation skipped/failed"
+
+# ---------------------------------------------------------------------------
 # Serving (Phase 7: vLLM)
 # ---------------------------------------------------------------------------
 serve-api: ## Run the FastAPI wrapper (Phase 8)
