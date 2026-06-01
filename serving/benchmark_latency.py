@@ -1,14 +1,27 @@
-"""Lightweight latency benchmark for the vLLM chat-completions endpoint (Phase 7).
+"""Lightweight latency benchmark for FinSage-7B serving endpoints (Phase 7/10).
 
-Sends concurrent chat-completion requests and reports latency percentiles and
-approximate throughput. Uses ``asyncio`` + ``httpx.AsyncClient``; a custom
-transport can be injected for fast, network-free unit tests.
+Sends concurrent requests and reports latency percentiles and approximate
+throughput. Two endpoints are supported:
+
+- ``vllm_chat_completions`` — the raw vLLM OpenAI ``/chat/completions`` endpoint
+  (bearer auth, ``usage.completion_tokens`` read for throughput).
+- ``api_chat`` — the FastAPI wrapper ``/chat`` endpoint (``X-API-Key`` auth,
+  app-friendly ``{question, filing_excerpt, ...}`` body).
+
+Uses ``asyncio`` + ``httpx.AsyncClient``; a custom transport can be injected for
+fast, network-free unit tests.
 
 Example::
 
+    # vLLM directly:
     python serving/benchmark_latency.py --base-url http://localhost:8000/v1 \\
-        --model finsage-7b --num-requests 20 --concurrency 1 \\
+        --endpoint vllm_chat_completions --model finsage-7b --num-requests 20 \\
         --output-path reports/figures/vllm_latency_benchmark.json
+
+    # Through the FastAPI wrapper:
+    python serving/benchmark_latency.py --base-url http://localhost:8080/v1 \\
+        --endpoint api_chat --api-key change-me --num-requests 20 \\
+        --output-path reports/figures/api_latency_benchmark.json
 """
 
 from __future__ import annotations
@@ -24,14 +37,68 @@ import typer
 
 from finsage.logging_utils import get_logger, setup_logging
 
-app = typer.Typer(help="Benchmark vLLM chat-completion latency.", add_completion=False)
+app = typer.Typer(help="Benchmark FinSage-7B serving latency.", add_completion=False)
 logger = get_logger(__name__)
+
+#: Supported benchmark endpoints.
+VLLM_ENDPOINT = "vllm_chat_completions"
+API_ENDPOINT = "api_chat"
 
 DEFAULT_PROMPT = (
     "Summarize the key risk factors in this filing excerpt: The company faces "
     "competition, supply chain disruption, inflation, and regulatory uncertainty. "
     "Demand softened year over year while costs rose."
 )
+
+#: Fabricated excerpt for the api_chat endpoint (no real filing data).
+DEFAULT_EXCERPT = (
+    "The company faces supply chain disruption, competition, and regulatory uncertainty. "
+    "Demand softened year over year while costs rose."
+)
+
+
+def _build_request(
+    endpoint: str, base_url: str, model: str, max_tokens: int, api_key: str | None
+) -> tuple[str, dict[str, Any], dict[str, str]]:
+    """Build the (url, payload, headers) for the chosen endpoint.
+
+    Args:
+        endpoint: ``vllm_chat_completions`` or ``api_chat``.
+        base_url: Endpoint base URL (including ``/v1``).
+        model: Served model name (vLLM endpoint only).
+        max_tokens: Max tokens to generate.
+        api_key: Optional API key (bearer for vLLM, X-API-Key for the API).
+
+    Returns:
+        A ``(url, payload, headers)`` tuple.
+
+    Raises:
+        ValueError: If ``endpoint`` is not recognised.
+    """
+    base = base_url.rstrip("/")
+    headers = {"Content-Type": "application/json"}
+    if endpoint == API_ENDPOINT:
+        if api_key:
+            headers["X-API-Key"] = api_key
+        payload = {
+            "question": "Summarize the key risk factors.",
+            "filing_excerpt": DEFAULT_EXCERPT,
+            "task_type": "risk_summary",
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+        }
+        return f"{base}/chat", payload, headers
+    if endpoint == VLLM_ENDPOINT:
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": DEFAULT_PROMPT}],
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+        }
+        return f"{base}/chat/completions", payload, headers
+    raise ValueError(f"Unknown endpoint {endpoint!r}; expected {VLLM_ENDPOINT} or {API_ENDPOINT}")
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
@@ -77,6 +144,8 @@ async def _one_request(
             if response.status_code != 200:
                 return False, elapsed, 0
             data = response.json()
+            # vLLM returns usage.completion_tokens; the API /chat does not, so
+            # token throughput is only reported for the vLLM endpoint.
             tokens = int(data.get("usage", {}).get("completion_tokens", 0) or 0)
             return True, elapsed, tokens
         except (httpx.HTTPError, ValueError):
@@ -91,18 +160,10 @@ async def _run_async(
     max_tokens: int,
     api_key: str | None,
     transport: httpx.AsyncBaseTransport | None,
+    endpoint: str = VLLM_ENDPOINT,
 ) -> dict[str, Any]:
     """Run the benchmark coroutine and aggregate results."""
-    url = f"{base_url.rstrip('/')}/chat/completions"
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": DEFAULT_PROMPT}],
-        "max_tokens": max_tokens,
-        "temperature": 0.0,
-    }
+    url, payload, headers = _build_request(endpoint, base_url, model, max_tokens, api_key)
     semaphore = asyncio.Semaphore(max(1, concurrency))
 
     wall_start = time.perf_counter()
@@ -119,6 +180,7 @@ async def _run_async(
 
     return {
         "base_url": base_url,
+        "endpoint": endpoint,
         "model": model,
         "num_requests": num_requests,
         "concurrency": concurrency,
@@ -146,34 +208,41 @@ def run_benchmark(
     max_tokens: int = 256,
     api_key: str | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
+    endpoint: str = VLLM_ENDPOINT,
 ) -> dict[str, Any]:
     """Run the latency benchmark synchronously.
 
     Args:
-        base_url: vLLM base URL.
-        model: Served model name.
+        base_url: Endpoint base URL (including ``/v1``).
+        model: Served model name (vLLM endpoint only).
         num_requests: Total requests to send.
         concurrency: Maximum in-flight requests.
         max_tokens: Max tokens per request.
-        api_key: Optional API key.
+        api_key: Optional API key (bearer for vLLM, X-API-Key for the API).
         transport: Optional httpx transport (injected by tests for mocking).
+        endpoint: ``vllm_chat_completions`` or ``api_chat``.
 
     Returns:
         A JSON-serialisable metrics dict (no NaN/Infinity).
     """
     return asyncio.run(
-        _run_async(base_url, model, num_requests, concurrency, max_tokens, api_key, transport)
+        _run_async(
+            base_url, model, num_requests, concurrency, max_tokens, api_key, transport, endpoint
+        )
     )
 
 
 @app.command()
 def main(
-    base_url: str = typer.Option("http://localhost:8000/v1", help="vLLM base URL."),
-    model: str = typer.Option("finsage-7b", help="Served model name."),
+    base_url: str = typer.Option("http://localhost:8000/v1", help="Endpoint base URL."),
+    endpoint: str = typer.Option(
+        VLLM_ENDPOINT, help=f"Endpoint: {VLLM_ENDPOINT} or {API_ENDPOINT}."
+    ),
+    model: str = typer.Option("finsage-7b", help="Served model name (vLLM endpoint)."),
     num_requests: int = typer.Option(20, help="Total requests to send."),
     concurrency: int = typer.Option(1, help="Maximum in-flight requests."),
     max_tokens: int = typer.Option(256, help="Max tokens per request."),
-    api_key: str = typer.Option("", help="Optional API key."),
+    api_key: str = typer.Option("", help="Optional API key (bearer vLLM / X-API-Key API)."),
     output_path: str = typer.Option(
         "reports/figures/vllm_latency_benchmark.json", help="JSON output path."
     ),
@@ -181,8 +250,9 @@ def main(
     """Benchmark the endpoint and write the metrics JSON.
 
     Args:
-        base_url: vLLM base URL.
-        model: Served model name.
+        base_url: Endpoint base URL (including ``/v1``).
+        endpoint: ``vllm_chat_completions`` or ``api_chat``.
+        model: Served model name (vLLM endpoint only).
         num_requests: Total requests to send.
         concurrency: Maximum in-flight requests.
         max_tokens: Max tokens per request.
@@ -190,10 +260,17 @@ def main(
         output_path: Destination JSON path.
 
     Raises:
-        typer.Exit: With code 1 if all requests fail (endpoint unavailable).
+        typer.Exit: With code 1 on a bad endpoint or if all requests fail.
     """
     setup_logging("INFO")
-    metrics = run_benchmark(base_url, model, num_requests, concurrency, max_tokens, api_key or None)
+    if endpoint not in (VLLM_ENDPOINT, API_ENDPOINT):
+        logger.error(
+            "Unknown --endpoint %r; expected %s or %s", endpoint, VLLM_ENDPOINT, API_ENDPOINT
+        )
+        raise typer.Exit(code=1)
+    metrics = run_benchmark(
+        base_url, model, num_requests, concurrency, max_tokens, api_key or None, endpoint=endpoint
+    )
 
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

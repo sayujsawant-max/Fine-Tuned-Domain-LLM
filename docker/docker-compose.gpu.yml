@@ -1,0 +1,28 @@
+# FinSage-7B — GPU override for the vLLM service.
+#
+# Layer this on top of the base compose to grant the vLLM container access to
+# an NVIDIA GPU via the NVIDIA Container Toolkit:
+#
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up --build
+#
+# Prerequisites on the host:
+#   - NVIDIA driver installed
+#   - NVIDIA Container Toolkit installed and the Docker daemon configured
+#     (`nvidia-ctk runtime configure`); verify with:
+#       docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi
+#
+# NOTE: Docker Compose GPU syntax varies by version. The `deploy.resources`
+# block below is the Compose-spec form. If your daemon/Compose does not honour
+# it, set the default runtime to `nvidia`, or run vLLM with `docker run --gpus all`.
+services:
+  vllm:
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

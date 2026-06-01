@@ -3,13 +3,144 @@
 ## Topology
 
 ```
-client → FastAPI wrapper (public, :8080, Phase 8) → vLLM (internal, :8000, Phase 7) → merged model
+Browser → Frontend (:3000) → Next.js /api proxy → FastAPI (:8080) → vLLM (:8000, internal) → merged model
 ```
 
-Phase 7 delivers the **vLLM inference engine**; Phase 8 delivers the public
-**FastAPI wrapper** (auth, logging, prompt templates, disclaimer injection, rate
-limiting). The vLLM server is **internal-only** and must never be exposed to the
-public internet — all public traffic goes through the FastAPI wrapper.
+Phase 7 delivers the **vLLM inference engine**; Phase 8 the public **FastAPI
+wrapper** (auth, logging, prompt templates, disclaimer, rate limiting); Phase 9
+the **Next.js frontend**; Phase 10 ties it together with **Docker Compose**. The
+vLLM server is **internal-only** and must never be exposed publicly — all public
+traffic flows through the frontend and API.
+
+## Phase 10 — full-stack deployment
+
+### 1. Deployment architecture
+
+Three Docker Compose files compose into the modes below. Services share a private
+`finsage-network`; `api` waits for vLLM health, `frontend` waits for API health.
+
+| File | Adds |
+|------|------|
+| `docker/docker-compose.yml` | base stack: `vllm`, `api`, `frontend` |
+| `docker/docker-compose.demo.yml` | GPU-free `api-demo` + `frontend-demo` (demo mode) |
+| `docker/docker-compose.gpu.yml` | NVIDIA device reservations for `vllm` |
+
+### 2. Local demo deployment (no GPU, no model)
+
+```bash
+cp .env.example .env
+make deploy-demo
+# or: docker compose -f docker/docker-compose.demo.yml up --build
+```
+
+Open <http://localhost:3000>. The frontend runs with `NEXT_PUBLIC_DEMO_MODE=true`;
+when the backend can't serve a real answer the `/api/chat` proxy returns a
+clearly-labelled mock. Ideal for recruiters and laptops.
+
+### 3. Local full-stack deployment (GPU + merged model)
+
+```bash
+cp .env.example .env                 # set a strong API_SECRET_KEY
+make merge-adapter                   # produce checkpoints/finsage-7b-merged (once)
+make deploy-full                     # docker compose -f docker/docker-compose.yml up --build
+```
+
+`vllm` mounts the merged model read-only at `/models/finsage-7b-merged`. First
+start is slow (7B weights); watch `GET :8000/v1/models`.
+
+### 4. GPU VM deployment (RunPod / Lambda / any provider)
+
+```bash
+# On the GPU VM, from the repo root:
+bash scripts/deploy_gpu_vm.sh
+# or explicitly:
+make deploy-gpu                      # base + gpu override
+```
+
+`deploy_gpu_vm.sh` checks Docker + the NVIDIA Container Toolkit, prepares `.env`,
+and starts the GPU stack. Verify GPU visibility first:
+`docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi`.
+Package a provider-agnostic deployment bundle with `make export-deployment`
+(→ `dist/finsage-deployment-bundle/`; no weights, data, or secrets).
+
+### 5. Docker Compose services
+
+| Service | Image | Port | Notes |
+|---------|-------|------|-------|
+| `vllm` | `Dockerfile.serving` (CUDA) | 8000 | Internal; GPU; mounts merged model RO |
+| `api` | `Dockerfile.api` (slim, non-root) | 8080 | No vLLM deps; `depends_on` vllm healthy |
+| `frontend` | `Dockerfile.frontend` (node:20-alpine) | 3000 | `depends_on` api healthy; secret server-side |
+
+### 6. Environment variables
+
+See `.env.example`. Server-only (never `NEXT_PUBLIC_`): `API_SECRET_KEY`,
+`API_BASE_URL`. Compose interpolates `${API_SECRET_KEY:-change-me}` from your
+shell or `.env`. vLLM tunables: `MAX_MODEL_LEN`, `GPU_MEMORY_UTILIZATION`,
+`TENSOR_PARALLEL_SIZE`, `MAX_NUM_SEQS`, `DTYPE`.
+
+### 7. Health checks
+
+```bash
+make check-full-stack    # frontend + API (/health,/ready,/chat) + vLLM
+# demo (skip vLLM):
+python scripts/check_full_stack.py --demo
+```
+
+Writes `reports/figures/full_stack_health.json`; exits non-zero on failure. Each
+container also has a Docker `HEALTHCHECK`, and Compose gates startup on them.
+
+### 8. Latency benchmarking
+
+```bash
+make benchmark-api       # through the FastAPI wrapper (api_chat)
+make benchmark-vllm      # directly against vLLM (vllm_chat_completions)
+```
+
+Reports p50/p95/p99, average/min/max, and (vLLM) approximate tokens/sec to
+`reports/figures/*_latency_benchmark.json`.
+
+### 9. Security checklist
+
+- [ ] Set a strong `API_SECRET_KEY` (never `change-me`); rotate periodically.
+- [ ] Do **not** expose vLLM (:8000) publicly — drop its `ports` mapping in prod.
+- [ ] Serve over **HTTPS** (reverse proxy / platform TLS).
+- [ ] Restrict `CORS_ALLOWED_ORIGINS` to the real frontend origin(s).
+- [ ] Keep `LOG_REQUEST_BODY=false` — never log raw filings.
+- [ ] Put the stack behind a reverse proxy + firewall; expose only :3000 (and :8080 if needed).
+- [ ] Use an external rate limiter (e.g. Redis) for multi-replica API.
+- [ ] Monitor GPU memory; tune `GPU_MEMORY_UTILIZATION` / `MAX_MODEL_LEN`.
+- [ ] Add authentication in front of the frontend if it is public.
+- [ ] Confirm the browser bundle holds no secret (`grep -r NEXT_PUBLIC frontend`).
+
+### 10. Public demo deployment options
+
+- **Demo mode anywhere:** deploy only the frontend (Vercel / any Node host) with
+  `NEXT_PUBLIC_DEMO_MODE=true` — no GPU, mocked answers, recruiter-ready.
+- **Frontend on Vercel + API/vLLM on a GPU VM:** set `API_BASE_URL` (server-only)
+  to the HTTPS API endpoint and `API_SECRET_KEY` as an encrypted env var.
+- **All-in-one GPU VM:** `make deploy-gpu` behind a TLS reverse proxy.
+
+### 11. Troubleshooting
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `Merged model not found` | Run `make merge-adapter` or set `MODEL_PATH`. |
+| `could not select device driver "" with capabilities: [[gpu]]` | NVIDIA Container Toolkit missing/not configured; `nvidia-ctk runtime configure`. |
+| vLLM slow to become healthy | 7B weights load for minutes; the healthcheck `start_period` is 300s. |
+| API cannot reach vLLM | Use `VLLM_BASE_URL=http://vllm:8000/v1` inside Compose; check the vllm logs. |
+| Frontend cannot reach API | Use `API_BASE_URL=http://api:8080/v1` inside Compose. |
+| `CORS error` in the browser | Add the frontend origin to `CORS_ALLOWED_ORIGINS`. |
+| `401 Unauthorized` | Send a valid `X-API-Key`; in production set a real `API_SECRET_KEY`. |
+| `port is already allocated` | Stop the conflicting process or change the published port. |
+| Docker GPU runtime error | Verify with `docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi`. |
+
+## Phase 8 — FastAPI wrapper
+
+The wrapper (`finsage.serving.app:create_app`) is a thin, CPU-only service that
+proxies to vLLM over HTTP and layers on production concerns:
+
+| Concern | Where | Notes |
+|---------|-------|-------|
 
 ## Phase 8 — FastAPI wrapper
 

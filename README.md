@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 9 — Frontend demo ✅** (Next.js + TypeScript + Tailwind; recruiter-friendly, works in demo mode with no backend, calls the Phase 8 API via a server-side proxy that keeps the API key private)
+**Current status: Phase 10 — Docker & full-stack deployment ✅** (one-command Compose stack with demo / full / GPU modes, full-stack health check, and deployment docs; demo mode runs on any laptop with no GPU)
 
 ---
 
@@ -54,7 +54,7 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 7 | vLLM OpenAI-compatible serving | ✅ Done |
 | 8 | FastAPI backend (auth, rate limiting, logging, disclaimer) | ✅ Done |
 | 9 | Frontend demo (Next.js + TypeScript + Tailwind) | ✅ Done |
-| 10 | Docker + deployment | ⏳ Planned |
+| 10 | Docker + full-stack deployment (demo/full/GPU) | ✅ Done |
 | 11 | Benchmark PDF + Hugging Face publishing | ⏳ Planned |
 
 ## Quickstart
@@ -685,11 +685,82 @@ make docker-up-full
 
 Full script: [reports/demo_script.md](reports/demo_script.md).
 
+## Phase 10: Docker and Deployment
+
+The whole stack runs with one command via Docker Compose. The public path is
+**browser → frontend (:3000) → API (:8080) → vLLM (:8000, internal) → model**;
+the API secret stays server-side and vLLM is never the public endpoint.
+
+```bash
+cp .env.example .env          # then edit — set a strong API_SECRET_KEY
+```
+
+### Deployment modes
+
+| Mode | Command | GPU? | Model? | Use |
+|------|---------|------|--------|-----|
+| **Demo** | `make deploy-demo` | no | no | Recruiters / laptops — frontend mocks answers |
+| **Full** | `make deploy-full` | yes | yes | Local full stack (needs merged model + GPU) |
+| **GPU** | `make deploy-gpu` | yes | yes | Full stack with explicit NVIDIA device reservations |
+
+Equivalent direct Compose commands:
+
+```bash
+# Demo (no GPU, no model):
+docker compose -f docker/docker-compose.demo.yml up --build
+
+# Full local:
+docker compose -f docker/docker-compose.yml up --build
+
+# GPU (NVIDIA Container Toolkit required):
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up --build
+```
+
+Full mode requires the merged model at `checkpoints/finsage-7b-merged`
+(`make merge-adapter`). GPU mode requires the **NVIDIA Container Toolkit**.
+
+### Verify & benchmark
+
+```bash
+make check-full-stack       # frontend + API (/health,/ready,/chat) + vLLM probes
+make benchmark-api          # latency through the API → reports/figures/api_latency_benchmark.json
+```
+
+`scripts/check_full_stack.py` writes a JSON report to
+`reports/figures/full_stack_health.json` and exits non-zero on failure.
+
+### Cloud GPU deployment
+
+`scripts/deploy_gpu_vm.sh` bootstraps a generic Ubuntu GPU VM (RunPod / Lambda /
+any provider): it checks Docker + the NVIDIA Container Toolkit, prepares `.env`,
+and starts the GPU stack. Package a provider-agnostic bundle with
+`make export-deployment` (→ `dist/finsage-deployment-bundle/`, no weights/secrets).
+
+### ⚠️ Production warning
+
+**Do not deploy with `API_SECRET_KEY=change-me`.** Set a strong secret, serve
+over HTTPS, restrict CORS, keep vLLM internal, and review
+[docs/deployment_guide.md](docs/deployment_guide.md) +
+[reports/deployment_checklist.md](reports/deployment_checklist.md).
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `Merged model not found` | `make merge-adapter` or set `MODEL_PATH` |
+| `could not select device driver ... gpu` | Install/enable the NVIDIA Container Toolkit; use the gpu override |
+| API `/v1/ready` → `not_ready` | vLLM still loading (7B weights) or `VLLM_BASE_URL` wrong |
+| Frontend can't reach API | Check `API_BASE_URL` (use `http://api:8080/v1` inside Compose) |
+| `CORS error` | Add the frontend origin to `CORS_ALLOWED_ORIGINS` |
+| `401` from API | Send a valid `X-API-Key`; in prod set a real `API_SECRET_KEY` |
+| `port is already allocated` | Stop the conflicting process or change the published port |
+
 ## Deployment plan
 
 Docker Compose orchestrates the stack: `frontend` (Next.js, CPU) → `api` (public
-FastAPI, CPU) → `vllm` (internal inference, GPU). See [docker/](docker/) and
-[docs/deployment_guide.md](docs/deployment_guide.md).
+FastAPI, CPU) → `vllm` (internal inference, GPU). See [docker/](docker/),
+[docs/deployment_guide.md](docs/deployment_guide.md), and
+[reports/deployment_checklist.md](reports/deployment_checklist.md).
 
 ## ⚠️ Disclaimer — not financial advice
 

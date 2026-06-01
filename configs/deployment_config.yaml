@@ -1,0 +1,27 @@
+# FinSage-7B deployment configuration (Phase 10).
+# Reference values for the full-stack deployment. The runtime source of truth is
+# environment variables / .env and docker/docker-compose*.yml; this file
+# documents the intended topology and is consumed by health/benchmark tooling.
+
+deployment:
+  mode: full              # one of: demo | full | gpu
+  public_frontend_port: 3000
+  public_api_port: 8080
+  internal_vllm_port: 8000
+
+security:
+  require_api_key: true
+  expose_vllm_publicly: false
+  log_request_body: false
+  cors_allowed_origins:
+    - http://localhost:3000
+
+healthchecks:
+  frontend_url: http://localhost:3000
+  api_url: http://localhost:8080/v1
+  vllm_url: http://localhost:8000/v1
+
+latency:
+  num_requests: 20
+  concurrency: 1
+  output_tokens: 256

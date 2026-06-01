@@ -1,12 +1,16 @@
 # vLLM serving image for FinSage-7B (Phase 7).
 #
 # REQUIRES an NVIDIA GPU at runtime + the NVIDIA Container Toolkit:
-#   docker run --gpus all ...   (or `deploy.resources` in docker-compose.yml)
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up
+#   (or `docker run --gpus all ...`)
 #
 # vLLM is tightly coupled to specific CUDA/torch versions. This image pins a
 # CUDA 12.1 runtime base; if `pip install vllm` resolves a wheel built for a
 # different CUDA, either switch the base tag to match (e.g. cuda:12.4.x) or use
 # the official `vllm/vllm-openai:latest` image and mount the merged model.
+#
+# No secrets are baked in. The merged model is MOUNTED at runtime (read-only)
+# and MODEL_PATH points at it (see docker-compose.yml).
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED=1 \
@@ -33,7 +37,11 @@ RUN chmod +x serving/vllm_server.sh serving/vllm_lora_server.sh
 
 EXPOSE 8000
 
-# The merged model is mounted at runtime (see docker-compose.yml):
+# 7B weights take time to load; the long start-period is set at the compose
+# level. This image-level check uses the OpenAI-compatible /v1/models endpoint.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=20 \
+    CMD curl -f http://localhost:8000/v1/models || exit 1
+
+# The merged model is mounted at runtime:
 #   -v $(pwd)/checkpoints/finsage-7b-merged:/models/finsage-7b-merged:ro
-# and MODEL_PATH points at it.
 CMD ["bash", "serving/vllm_server.sh"]

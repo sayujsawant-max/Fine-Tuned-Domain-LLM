@@ -78,7 +78,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const data = await upstream.json().catch(() => null);
     if (!upstream.ok) {
-      // Surface the backend's normalised error shape to the client.
+      // In demo mode, a backend error (e.g. 503 when no vLLM is attached) still
+      // yields an explorable UI: fall back to the labelled mock. In real mode,
+      // surface the backend's normalised error shape unchanged.
+      if (DEMO_MODE) {
+        return NextResponse.json(getMockAnalysisResponse(payload), { status: 200 });
+      }
       return NextResponse.json(
         data ?? { error: `Backend error (HTTP ${upstream.status}).` },
         { status: upstream.status },

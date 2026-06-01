@@ -26,7 +26,34 @@ FastAPI Wrapper (finsage.serving.app)  [auth, logging, disclaimer, safety]
 Frontend Demo (frontend/)
 ```
 
-## Phase 9 — frontend demo (current)
+## Phase 10 — full-stack deployment (current)
+
+```
+Browser
+  ↓
+Next.js Frontend  :3000                 (docker: finsage-frontend)
+  ↓
+Next.js Server Route /api/chat          (injects X-API-Key; secret stays server-side)
+  ↓
+FastAPI Wrapper   :8080                 (docker: finsage-api)
+  ├── Auth
+  ├── Rate Limit
+  ├── Logging
+  ├── Disclaimer
+  ↓
+vLLM Server       :8000  [INTERNAL]     (docker: finsage-vllm, GPU)
+  ↓
+FinSage-7B Merged Model
+```
+
+Docker Compose wires these on a private `finsage-network`. `api` `depends_on`
+vLLM being healthy; `frontend` `depends_on` the API being healthy. Three modes:
+**demo** (`docker-compose.demo.yml`, no GPU/model), **full**
+(`docker-compose.yml`), and **GPU** (+ `docker-compose.gpu.yml` device
+reservations). Only the frontend (and optionally the API) is public — vLLM is
+internal. See [deployment_guide.md](deployment_guide.md).
+
+## Phase 9 — frontend demo
 
 ```
 User Browser

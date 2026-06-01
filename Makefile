@@ -9,7 +9,9 @@ PYTHON ?= python
         test-vllm test-api-server benchmark-vllm docker-build docker-up docker-build-serving \
         docker-up-serving docker-build-api docker-up-api docker-up-full report \
         frontend-install frontend-dev frontend-build frontend-lint frontend-test \
-        frontend-typecheck docker-build-frontend docker-up-frontend check-full
+        frontend-typecheck docker-build-frontend docker-up-frontend check-full \
+        deploy-demo deploy-full deploy-gpu check-full-stack benchmark-api \
+        export-deployment docker-build-all docker-up-demo
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -181,3 +183,39 @@ docker-build-frontend: ## Build the frontend Docker image
 
 docker-up-frontend: ## Start the frontend service (starts api+vllm via depends_on)
 	docker compose -f docker/docker-compose.yml up frontend
+
+# ---------------------------------------------------------------------------
+# Deployment (Phase 10: full-stack Docker)
+# ---------------------------------------------------------------------------
+deploy-demo: ## Start the CPU-only demo stack (no GPU/model)
+	bash scripts/deploy_local.sh --demo
+
+deploy-full: ## Start the full stack (vllm + api + frontend; requires merged model)
+	bash scripts/deploy_local.sh --full
+
+deploy-gpu: ## Start the full stack with explicit GPU reservations
+	bash scripts/deploy_local.sh --gpu
+
+check-full-stack: ## Verify frontend + API + vLLM health
+	$(PYTHON) scripts/check_full_stack.py \
+		--frontend-url http://localhost:3000 \
+		--api-url http://localhost:8080/v1 \
+		--vllm-url http://localhost:8000/v1 \
+		--api-key $${API_SECRET_KEY:-change-me}
+
+benchmark-api: ## Benchmark API /chat latency -> reports/figures/api_latency_benchmark.json
+	$(PYTHON) serving/benchmark_latency.py \
+		--base-url http://localhost:8080/v1 \
+		--endpoint api_chat \
+		--api-key $${API_SECRET_KEY:-change-me} \
+		--num-requests 20 --concurrency 1 \
+		--output-path reports/figures/api_latency_benchmark.json
+
+export-deployment: ## Package deployment files into dist/finsage-deployment-bundle/
+	bash scripts/export_deployment_bundle.sh
+
+docker-build-all: ## Build all stack images
+	docker compose -f docker/docker-compose.yml build
+
+docker-up-demo: ## Start the demo compose stack directly
+	docker compose -f docker/docker-compose.demo.yml up

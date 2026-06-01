@@ -1,0 +1,64 @@
+# FinSage-7B — demo mode (NO GPU, NO model server required).
+#
+# Runs the CPU API and the frontend in demo mode. The frontend's server-side
+# /api/chat proxy returns a clearly-labelled deterministic mock when the backend
+# cannot serve a real answer, so the UI is fully explorable on a normal laptop.
+#
+#   docker compose -f docker/docker-compose.demo.yml up --build
+#
+# The `api-demo` service is the real FastAPI app with no vLLM behind it: its
+# /v1/health works, while /v1/chat returns 503 (no model) — at which point the
+# frontend (NEXT_PUBLIC_DEMO_MODE=true) falls back to the demo mock.
+services:
+  api-demo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    image: finsage-api:latest
+    container_name: finsage-api-demo
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: development
+      API_HOST: 0.0.0.0
+      API_PORT: "8080"
+      API_SECRET_KEY: ${API_SECRET_KEY:-change-me}
+      # No vLLM in demo mode; /v1/ready will report not_ready (expected).
+      VLLM_BASE_URL: http://localhost:8000/v1
+      SERVED_MODEL_NAME: finsage-7b
+      DISCLAIMER_ENABLED: "true"
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - finsage-demo
+
+  frontend-demo:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    image: finsage-frontend:latest
+    container_name: finsage-frontend-demo
+    ports:
+      - "3000:3000"
+    environment:
+      # Demo mode: the proxy mocks answers when the backend can't serve them.
+      API_BASE_URL: http://api-demo:8080/v1
+      API_SECRET_KEY: ${API_SECRET_KEY:-change-me}
+      NEXT_PUBLIC_DEMO_MODE: "true"
+      NEXT_PUBLIC_APP_NAME: FinSage-7B (demo)
+    depends_on:
+      api-demo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - finsage-demo
+
+networks:
+  finsage-demo:
+    driver: bridge

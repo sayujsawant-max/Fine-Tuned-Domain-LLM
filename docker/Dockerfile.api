@@ -25,7 +25,16 @@ RUN pip install --upgrade pip && pip install .
 COPY configs ./configs
 COPY serving ./serving
 
+# Run as a non-root user for safety.
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8080
+
+# Healthcheck mirrors the compose-level check so the image is usable standalone.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+    CMD curl -f http://localhost:8080/v1/health || exit 1
 
 # start_api.sh binds to 0.0.0.0 and honours API_HOST / API_PORT / API_RELOAD.
 CMD ["bash", "serving/start_api.sh"]
