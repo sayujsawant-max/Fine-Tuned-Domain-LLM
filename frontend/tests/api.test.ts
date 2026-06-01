@@ -62,4 +62,18 @@ describe("analyzeFiling", () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network down"));
     await expect(analyzeFiling(request)).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("rejects a 200 body with an unexpected shape", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ unexpected: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(analyzeFiling(request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 502,
+    });
+  });
 });

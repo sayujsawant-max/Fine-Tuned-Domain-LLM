@@ -10,6 +10,15 @@ from finsage.serving.disclaimer import FINANCIAL_DISCLAIMER
 #: Backwards-compatible alias for the canonical disclaimer string.
 DISCLAIMER = FINANCIAL_DISCLAIMER
 
+#: Upper bounds on free-text request fields. These guard against oversized
+#: payloads (memory pressure / abuse) by rejecting them early with a clean 422
+#: instead of forwarding multi-megabyte bodies to the model backend.
+#: ``MAX_FILING_EXCERPT_CHARS`` is generous (~25k tokens) so legitimate filing
+#: sections are never truncated.
+MAX_QUESTION_CHARS = 2_000
+MAX_FILING_EXCERPT_CHARS = 100_000
+MAX_MESSAGE_CONTENT_CHARS = 100_000
+
 
 class HealthResponse(BaseModel):
     """Liveness payload for the FastAPI service.
@@ -53,9 +62,17 @@ class ChatRequest(BaseModel):
         include_disclaimer: Whether to append the financial disclaimer.
     """
 
-    question: str = Field(..., min_length=1, description="Question about the filing.")
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_QUESTION_CHARS,
+        description="Question about the filing.",
+    )
     filing_excerpt: str = Field(
-        ..., min_length=1, description="Filing excerpt to ground the answer in."
+        ...,
+        min_length=1,
+        max_length=MAX_FILING_EXCERPT_CHARS,
+        description="Filing excerpt to ground the answer in.",
     )
     task_type: str | None = Field(default=None, description="Optional task hint.")
     max_tokens: int = Field(default=256, ge=1, le=2048)
@@ -126,7 +143,7 @@ class OpenAIChatMessage(BaseModel):
     """
 
     role: str
-    content: str
+    content: str = Field(..., max_length=MAX_MESSAGE_CONTENT_CHARS)
 
 
 class OpenAIChatCompletionRequest(BaseModel):

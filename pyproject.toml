@@ -20,72 +20,74 @@ classifiers = [
 
 # Default install is intentionally lightweight and CPU-friendly.
 # Heavy GPU / ML dependencies live in the optional groups below.
+# Upper bounds are pinned to the next major version so a transitive resolver
+# never silently pulls a breaking release into this "frozen" portfolio build.
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
-    "httpx>=0.27",
-    "python-dotenv>=1.0",
-    "rich>=13.7",
-    "typer>=0.12",
-    "beautifulsoup4>=4.12",
-    "lxml>=5.2",
-    "pyyaml>=6.0",
-    "numpy>=1.26",
-    "pandas>=2.2",
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.29,<1.0",
+    "pydantic>=2.6,<3.0",
+    "pydantic-settings>=2.2,<3.0",
+    "httpx>=0.27,<1.0",
+    "python-dotenv>=1.0,<2.0",
+    "rich>=13.7,<16.0",
+    "typer>=0.12,<1.0",
+    "beautifulsoup4>=4.12,<5.0",
+    "lxml>=5.2,<7.0",
+    "pyyaml>=6.0,<7.0",
+    "numpy>=1.26,<3.0",
+    "pandas>=2.2,<4.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.1",
-    "pytest-asyncio>=0.23",
-    "ruff>=0.4",
-    "black>=24.3",
-    "mypy>=1.9",
-    "types-PyYAML>=6.0",
-    "types-beautifulsoup4>=4.12",
+    "pytest>=8.1,<10.0",
+    "pytest-asyncio>=0.23,<2.0",
+    "ruff>=0.4,<1.0",
+    "black>=24.3,<27.0",
+    "mypy>=1.9,<3.0",
+    "types-PyYAML>=6.0,<7.0",
+    "types-beautifulsoup4>=4.12,<5.0",
 ]
 ml = [
-    "transformers>=4.41",
-    "datasets>=2.19",
-    "evaluate>=0.4",
-    "rouge-score>=0.1.2",
-    "bert-score>=0.3.13",
-    "scikit-learn>=1.4",
-    "matplotlib>=3.8",
-    "spacy>=3.7",
-    "datasketch>=1.6",
+    "transformers>=4.41,<5.0",
+    "datasets>=2.19,<5.0",
+    "evaluate>=0.4,<1.0",
+    "rouge-score>=0.1.2,<1.0",
+    "bert-score>=0.3.13,<1.0",
+    "scikit-learn>=1.4,<2.0",
+    "matplotlib>=3.8,<4.0",
+    "spacy>=3.7,<4.0",
+    "datasketch>=1.6,<2.0",
 ]
 training = [
-    "torch>=2.3",
-    "transformers>=4.41",
-    "accelerate>=0.30",
-    "peft>=0.11",
-    "trl>=0.8",
-    "bitsandbytes>=0.43",
-    "wandb>=0.17",
+    "torch>=2.3,<3.0",
+    "transformers>=4.41,<5.0",
+    "accelerate>=0.30,<2.0",
+    "peft>=0.11,<1.0",
+    "trl>=0.8,<1.0",
+    "bitsandbytes>=0.43,<1.0",
+    "wandb>=0.17,<1.0",
 ]
 serving = [
     # GPU/Linux-oriented: vLLM requires CUDA and will not install on most
     # macOS/Windows machines. httpx (already a core dep) drives the client.
-    "vllm>=0.4",
-    "httpx>=0.27",
+    "vllm>=0.4,<1.0",
+    "httpx>=0.27,<1.0",
 ]
 llm = [
     # Optional: LLM-assisted dataset target enhancement (Phase 3.5). Needs an
     # ANTHROPIC_API_KEY at runtime; never part of the default install.
-    "anthropic>=0.40",
+    "anthropic>=0.40,<1.0",
 ]
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
+    "mkdocs>=1.6,<2.0",
+    "mkdocs-material>=9.5,<10.0",
 ]
 # Optional shared rate-limit backend for multi-replica API deployments.
 # Enabled at runtime via RATE_LIMIT_BACKEND=redis + REDIS_URL; the API falls
 # back to the in-memory limiter when this is not installed/reachable.
 redis = [
-    "redis>=5.0",
+    "redis>=5.0,<7.0",
 ]
 
 [project.scripts]

@@ -30,6 +30,22 @@ export interface ChatResponse {
   demo_mode?: boolean;
 }
 
+/**
+ * Runtime guard for the proxy response shape. The proxy is trusted, but a
+ * backend/version drift could yield an unexpected body; validating here turns a
+ * silent `undefined` render into an explicit, surfaced error.
+ */
+function isChatResponse(data: unknown): data is ChatResponse {
+  if (typeof data !== "object" || data === null) return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.answer === "string" &&
+    typeof d.model === "string" &&
+    typeof d.request_id === "string" &&
+    typeof d.latency_ms === "number"
+  );
+}
+
 /** Normalised API error surfaced to the UI. */
 export class ApiError extends Error {
   readonly status: number;
@@ -108,5 +124,8 @@ export async function analyzeFiling(
     );
   }
 
-  return data as ChatResponse;
+  if (!isChatResponse(data)) {
+    throw new ApiError("The backend returned an unexpected response shape.", 502);
+  }
+  return data;
 }

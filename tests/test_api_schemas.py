@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from finsage.serving.schemas import ChatRequest, OpenAIChatCompletionRequest
+from finsage.serving.schemas import (
+    MAX_FILING_EXCERPT_CHARS,
+    MAX_MESSAGE_CONTENT_CHARS,
+    MAX_QUESTION_CHARS,
+    ChatRequest,
+    OpenAIChatCompletionRequest,
+)
 
 
 def test_valid_chat_request():
@@ -26,6 +32,36 @@ def test_empty_filing_excerpt_fails():
     """A blank filing excerpt is rejected."""
     with pytest.raises(ValidationError):
         ChatRequest(question="q", filing_excerpt="")
+
+
+def test_oversized_question_fails():
+    """A question over the character cap is rejected."""
+    with pytest.raises(ValidationError):
+        ChatRequest(question="q" * (MAX_QUESTION_CHARS + 1), filing_excerpt="e")
+
+
+def test_oversized_filing_excerpt_fails():
+    """A filing excerpt over the character cap is rejected."""
+    with pytest.raises(ValidationError):
+        ChatRequest(question="q", filing_excerpt="e" * (MAX_FILING_EXCERPT_CHARS + 1))
+
+
+def test_max_size_fields_pass():
+    """Fields exactly at the cap are accepted."""
+    req = ChatRequest(
+        question="q" * MAX_QUESTION_CHARS,
+        filing_excerpt="e" * MAX_FILING_EXCERPT_CHARS,
+    )
+    assert len(req.question) == MAX_QUESTION_CHARS
+    assert len(req.filing_excerpt) == MAX_FILING_EXCERPT_CHARS
+
+
+def test_oversized_openai_message_content_fails():
+    """An OpenAI message body over the character cap is rejected."""
+    with pytest.raises(ValidationError):
+        OpenAIChatCompletionRequest(
+            messages=[{"role": "user", "content": "x" * (MAX_MESSAGE_CONTENT_CHARS + 1)}]
+        )
 
 
 @pytest.mark.parametrize("max_tokens", [0, -5, 4096])
