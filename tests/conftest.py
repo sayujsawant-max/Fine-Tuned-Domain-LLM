@@ -47,6 +47,18 @@ def eval_test_file() -> Path:
 
 
 @pytest.fixture
+def train_sample_file() -> Path:
+    """Return the path to the sample training set fixture."""
+    return FIXTURES_DIR / "train_sample.jsonl"
+
+
+@pytest.fixture
+def validation_sample_file() -> Path:
+    """Return the path to the sample validation set fixture."""
+    return FIXTURES_DIR / "validation_sample.jsonl"
+
+
+@pytest.fixture
 def mock_transport() -> httpx.MockTransport:
     """Return a MockTransport routing SEC URLs to local fixtures."""
     tickers = _load_fixture("company_tickers_sample.json")

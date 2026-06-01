@@ -1,38 +1,104 @@
-# Training Guide (Phase 6)
+# Training Guide (Phase 5)
 
-## Install the training stack (GPU)
+## QLoRA overview
 
-```bash
-make install-training   # torch, peft, trl, bitsandbytes, accelerate, wandb
-```
+QLoRA fine-tunes a large model cheaply: the base model is **frozen** and loaded
+in **4-bit NF4**, and gradients flow only through a small **LoRA adapter** added
+to the attention + MLP projections. This cuts memory enough to fine-tune
+Mistral-7B on a single consumer GPU, while the trained adapter stays a few MB.
 
-> Not part of the default install. Best run on a single 24 GB GPU (RTX 3090/4090)
-> or an A100 80 GB on RunPod. `bitsandbytes` on native Windows is painful — prefer
-> a Linux box, WSL2, or a cloud GPU.
+## Hardware requirements
 
-## Configure
+- **GPU required.** A single 24 GB GPU (RTX 3090/4090) works; A100 80 GB is
+  faster. `bitsandbytes` 4-bit needs CUDA — native Windows is painful, prefer
+  Linux, WSL2, or a cloud GPU (RunPod/Colab).
+- The CPU **dry-run** path needs none of this.
 
-- LoRA: [../configs/lora_config.yaml](../configs/lora_config.yaml)
-  (r=16, alpha=32, dropout=0.05, attention + MLP projections, 4-bit NF4).
-- Training: [../configs/training_config.yaml](../configs/training_config.yaml)
-  (3 epochs, lr 2e-4 cosine, bs 2 × grad-accum 8, bf16, grad checkpointing).
-- Set `HF_TOKEN` and `WANDB_API_KEY` in `.env`.
-
-## Run
+## Install
 
 ```bash
-make train                      # python training/train.py
-python training/merge_adapter.py  # merge LoRA into base for serving
+pip install -e ".[ml,training]"   # torch, transformers, peft, trl, bitsandbytes, accelerate, wandb, datasets
 ```
 
-## Method
+## Dataset requirements
 
-QLoRA: the base model is loaded in 4-bit NF4; only the LoRA adapter is trained
-via TRL's `SFTTrainer`. The merged checkpoint goes to `MERGED_MODEL_PATH` for vLLM.
+Train/validation JSONL from Phase 3, each example carrying `instruction`,
+`input`, `output`, `task_type` (validated before any model loads). Splits must
+be company-holdout (no train/test company overlap).
 
-## Tips
+## Prompt formatting
 
-- Validate the dataset before training (`make validate-dataset`).
-- Watch eval loss; early stopping is configured via `finsage.training.callbacks`.
-- Keep the adapter (small) under version control consideration; the merged model
-  is large and git-ignored.
+Each example is rendered by `finsage.training.data_formatter.format_sft_example`
+into a single `text` field (Mistral instruct format) that embeds a disclaimer
+instruction and **never** provides investment advice:
+
+```
+<s>[INST] You are FinSage-7B, a financial filing analysis assistant.
+Answer using only the provided filing excerpt. Do not provide investment advice.
+
+Task Type: ...
+Instruction: ...
+Filing Excerpt: ...
+[/INST]
+{output}</s>
+```
+
+## LoRA configuration ([configs/lora_config.yaml](../configs/lora_config.yaml))
+
+- `r=16`, `lora_alpha=32`, `lora_dropout=0.05`, `bias=none`, `task_type=CAUSAL_LM`.
+- `target_modules`: `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`
+  (attention + MLP projections — the standard high-coverage set for Mistral).
+
+## Quantization configuration
+
+4-bit **NF4** with double quantization and bfloat16 compute dtype
+(`BitsAndBytesConfig`). This is the "Q" in QLoRA.
+
+## Training hyperparameters ([configs/training_config.yaml](../configs/training_config.yaml))
+
+3 epochs · lr 2e-4 cosine (warmup 0.03) · batch 2 × grad-accum 8 ·
+`max_grad_norm=0.3` · gradient checkpointing · bf16 · `max_seq_length=2048` ·
+packing · `save_steps/eval_steps=200` · `load_best_model_at_end` on `eval_loss`.
+
+## Common failure points
+
+- **NaN/Inf loss** — `build_nan_loss_callback` stops training; lower the learning
+  rate, check for degenerate examples, ensure bf16 (not fp16) on Ampere+.
+- **OOM** — reduce `per_device_train_batch_size`, increase
+  `gradient_accumulation_steps`, lower `max_seq_length`, keep gradient
+  checkpointing on, ensure 4-bit loading is active.
+- **Tokenizer has no pad token** — handled (pad := eos, right padding).
+
+## Resume training
+
+```bash
+python training/train.py ... --resume-from-checkpoint checkpoints/finsage-7b/checkpoint-1200
+```
+
+## Adapter saving & merging
+
+`train()` saves the adapter, tokenizer, and `training_summary.json` to
+`--output-dir`. For deployment, merge the adapter into the base weights:
+
+```bash
+python training/merge_adapter.py --base-model mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter-path checkpoints/finsage-7b --output-dir checkpoints/finsage-7b-merged
+```
+
+## W&B tracking
+
+`--report-to wandb` (default) logs loss curves; run `wandb login` first, or use
+`--report-to none` for an offline run. `checkpoints/` and `wandb/` are git-ignored.
+
+## Dry-run
+
+`python training/train.py ... --dry-run` (or `make train-dry-run`) validates
+files, configs, and dataset schema and previews formatting **without importing
+torch/transformers or loading a model** — the fast pre-flight check before
+spending GPU time.
+
+## Next: Phase 6 — fine-tuned evaluation
+
+Phase 6 reuses the Phase 4 harness (`EvalRunner` + `TransformersGenerator` loaded
+with the adapter) to score the fine-tuned model on the same test set and metrics,
+producing the **before/after** benchmark vs the base-model baseline.

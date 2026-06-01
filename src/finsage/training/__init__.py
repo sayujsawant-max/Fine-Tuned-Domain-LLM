@@ -1,26 +1,43 @@
-"""QLoRA fine-tuning components (Phase 6).
+"""QLoRA fine-tuning components (Phase 5).
 
-These modules import heavy GPU libraries (torch, peft, trl, bitsandbytes) only
-inside functions, so importing the package on a CPU-only machine stays cheap.
+Heavy GPU libraries (torch, transformers, peft, trl, bitsandbytes, datasets) are
+imported lazily inside functions, so importing this package on a CPU-only
+machine stays cheap. The pure-Python data formatter and config loaders are safe
+to import directly.
 """
 
 from __future__ import annotations
 
-__all__ = ["QLoRATrainer", "InstructionDataCollator", "build_default_callbacks"]
+from finsage.training.callbacks import build_default_callbacks
+from finsage.training.data_formatter import (
+    count_tokens_approx,
+    format_dataset_for_sft,
+    format_sft_example,
+    validate_training_example,
+)
+from finsage.training.qlora_trainer import (
+    build_bnb_config,
+    build_lora_config,
+    build_sft_trainer,
+    build_training_args,
+    load_jsonl_dataset,
+    load_model_and_tokenizer,
+    load_yaml_config,
+    train,
+)
 
-
-def __getattr__(name: str) -> object:
-    """Lazily expose trainer symbols without importing GPU deps at import time."""
-    if name == "QLoRATrainer":
-        from finsage.training.qlora_trainer import QLoRATrainer
-
-        return QLoRATrainer
-    if name == "InstructionDataCollator":
-        from finsage.training.data_collator import InstructionDataCollator
-
-        return InstructionDataCollator
-    if name == "build_default_callbacks":
-        from finsage.training.callbacks import build_default_callbacks
-
-        return build_default_callbacks
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = [
+    "build_bnb_config",
+    "build_default_callbacks",
+    "build_lora_config",
+    "build_sft_trainer",
+    "build_training_args",
+    "count_tokens_approx",
+    "format_dataset_for_sft",
+    "format_sft_example",
+    "load_jsonl_dataset",
+    "load_model_and_tokenizer",
+    "load_yaml_config",
+    "train",
+    "validate_training_example",
+]

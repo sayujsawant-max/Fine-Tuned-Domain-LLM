@@ -58,10 +58,11 @@ ml = [
 ]
 training = [
     "torch>=2.3",
+    "transformers>=4.41",
+    "accelerate>=0.30",
     "peft>=0.11",
     "trl>=0.8",
     "bitsandbytes>=0.43",
-    "accelerate>=0.30",
     "wandb>=0.17",
 ]
 serving = [

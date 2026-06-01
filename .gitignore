@@ -41,9 +41,13 @@ Thumbs.db
 checkpoints/
 wandb/
 mlruns/
+runs/
+outputs/
 *.bin
 *.safetensors
 *.pt
+*.pth
+*.ckpt
 *.gguf
 
 # Raw / processed / cached SEC data — never commit filings (only .gitkeep / cards)

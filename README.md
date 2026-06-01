@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 4 — Baseline evaluation ✅** (mock backend is CPU-only; real Mistral-7B baseline is optional and GPU-bound)
+**Current status: Phase 5 — QLoRA fine-tuning pipeline ✅** (dry-run is CPU-only; real training is optional and GPU-bound)
 
 ---
 
@@ -49,14 +49,13 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | 2 | SEC EDGAR ingestion + section preprocessing | ✅ Done |
 | 3 | Chunking + instruction dataset generation (JSONL) | ✅ Done |
 | 4 | Baseline evaluation (base Mistral-7B, mock + real backends) | ✅ Done |
-| 5 | Dataset quality pass (LLM/human-reviewed targets) | ⏳ Planned |
-| 6 | QLoRA fine-tuning | ⏳ Planned |
-| 7 | Fine-tuned evaluation + benchmark report | ⏳ Planned |
-| 8 | vLLM serving | ⏳ Planned |
-| 9 | FastAPI backend (auth, logging, disclaimer) | ⏳ Planned |
-| 10 | Frontend demo | ⏳ Planned |
-| 11 | Docker + deployment | ⏳ Planned |
-| 12 | Benchmark PDF + Hugging Face publishing | ⏳ Planned |
+| 5 | QLoRA fine-tuning pipeline (dry-run + real) | ✅ Done |
+| 6 | Fine-tuned evaluation + benchmark report | ⏳ Planned |
+| 7 | vLLM serving | ⏳ Planned |
+| 8 | FastAPI backend (auth, logging, disclaimer) | ⏳ Planned |
+| 9 | Frontend demo | ⏳ Planned |
+| 10 | Docker + deployment | ⏳ Planned |
+| 11 | Benchmark PDF + Hugging Face publishing | ⏳ Planned |
 
 ## Quickstart
 
@@ -238,6 +237,68 @@ See [docs/dataset_guide.md](docs/dataset_guide.md) and
   [configs/training_config.yaml](configs/training_config.yaml).
 
 See [docs/training_guide.md](docs/training_guide.md).
+
+## QLoRA fine-tuning (Phase 5)
+
+Fine-tune the base model on the Phase 3 instruction dataset using **QLoRA**:
+the base model is frozen and loaded in 4-bit (NF4), and only a small **LoRA
+adapter** is trained. The adapter is saved separately from the base weights —
+it's a few MB, cheap to version and share, and merged into the base only for
+deployment.
+
+> **Train on a GPU.** Mistral-7B QLoRA needs a CUDA GPU (a single 24 GB
+> RTX 3090/4090 works; A100 80 GB is faster). It will not run usefully on CPU.
+
+**Dry-run (CPU, no model, no heavy deps)** — validates files/configs/schema and
+previews SFT formatting:
+
+```bash
+python training/train.py \
+  --train-file tests/fixtures/train_sample.jsonl \
+  --validation-file tests/fixtures/validation_sample.jsonl \
+  --output-dir /tmp/finsage_train_dry_run \
+  --config configs/training_config.yaml \
+  --lora-config configs/lora_config.yaml \
+  --dry-run
+```
+
+`make train-dry-run` runs exactly this.
+
+**Real training (GPU):**
+
+```bash
+pip install -e ".[ml,training]"
+wandb login   # optional; or use --report-to none
+
+python training/train.py \
+  --train-file data/datasets/train.jsonl \
+  --validation-file data/datasets/validation.jsonl \
+  --model-id mistralai/Mistral-7B-Instruct-v0.3 \
+  --output-dir checkpoints/finsage-7b \
+  --config configs/training_config.yaml \
+  --lora-config configs/lora_config.yaml \
+  --use-4bit --report-to wandb
+```
+
+**Resume from a checkpoint:**
+
+```bash
+python training/train.py ... --resume-from-checkpoint checkpoints/finsage-7b/checkpoint-1200
+```
+
+**Merge the adapter** into the base model for serving:
+
+```bash
+python training/merge_adapter.py \
+  --base-model mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter-path checkpoints/finsage-7b \
+  --output-dir checkpoints/finsage-7b-merged
+```
+
+**Outputs** (in `--output-dir`, git-ignored): the LoRA adapter, the tokenizer,
+and `training_summary.json` (examples, LoRA r/alpha, lr, epochs, final
+train/eval loss). W&B tracking is optional (`--report-to wandb|none`). See
+[docs/training_guide.md](docs/training_guide.md).
 
 ## Baseline evaluation (Phase 4)
 
