@@ -2,8 +2,8 @@
 PYTHON ?= python
 
 .PHONY: help install install-dev install-ml install-training install-serving \
-        lint format typecheck test check download-data extract-sections \
-        build-dataset validate-dataset train-dry-run train merge-adapter \
+        install-llm lint format typecheck test check download-data extract-sections \
+        build-dataset validate-dataset enhance-dataset train-dry-run train merge-adapter \
         eval-baseline eval-baseline-real eval-finetuned eval-finetuned-adapter \
         eval-finetuned-merged compare-models serve-api serve-vllm serve-vllm-lora \
         test-vllm test-api-server benchmark-vllm docker-build docker-up docker-build-serving \
@@ -34,6 +34,9 @@ install-training: ## Install GPU training stack (torch, peft, trl, bitsandbytes)
 
 install-serving: ## Install the vLLM serving stack
 	$(PYTHON) -m pip install -e ".[serving]"
+
+install-llm: ## Install the Anthropic SDK for LLM-assisted dataset enhancement
+	$(PYTHON) -m pip install -e ".[llm]"
 
 # ---------------------------------------------------------------------------
 # Quality gates
@@ -79,6 +82,9 @@ build-dataset: ## Build the JSONL instruction dataset
 
 validate-dataset: ## Validate the instruction dataset splits
 	$(PYTHON) scripts/validate_dataset.py validate --train-path data/datasets/train.jsonl --validation-path data/datasets/validation.jsonl --test-path data/datasets/test.jsonl --report-path data/datasets/validation_report.json
+
+enhance-dataset: ## LLM-assist stronger targets (mock; add ANTHROPIC_API_KEY + --no-mock for real)
+	$(PYTHON) scripts/enhance_dataset.py enhance --input-path data/datasets/train.jsonl --output-path data/datasets/train_enhanced.jsonl --mock
 
 # ---------------------------------------------------------------------------
 # Training & evaluation (Phase 5-7)

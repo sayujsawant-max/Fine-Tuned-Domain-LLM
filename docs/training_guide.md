@@ -60,6 +60,21 @@ Filing Excerpt: ...
 `max_grad_norm=0.3` · gradient checkpointing · bf16 · `max_seq_length=2048` ·
 packing · `save_steps/eval_steps=200` · `load_best_model_at_end` on `eval_loss`.
 
+## Library-version compatibility
+
+The trainer is written to work across library generations without code changes:
+
+- **TRL** — `build_training_args`/`build_sft_trainer` prefer `SFTConfig` and
+  introspect the `SFTTrainer` signature, so they use `processing_class` (modern
+  TRL ≥0.12) or `tokenizer` (legacy) and place the SFT fields wherever the
+  installed version expects them.
+- **transformers** — 4-bit loading uses `quantization_config=BitsAndBytesConfig`
+  (the `load_in_4bit=True` `from_pretrained` kwarg was removed in recent
+  releases).
+
+If a future TRL release renames a field the introspection doesn't catch, pin the
+working versions from the `training` extra and report it.
+
 ## Common failure points
 
 - **NaN/Inf loss** — `build_nan_loss_callback` stops training; lower the learning

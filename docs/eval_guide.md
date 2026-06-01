@@ -53,7 +53,8 @@ from companies not seen in training (company-holdout split).
 | `rouge_l` | LCS-based F-measure (hand-rolled; no `rouge-score` dependency). |
 | `numeric_exact_match` / `numeric_precision` / `numeric_recall` | Agreement on extracted `$`/`%`/magnitude/number values. |
 | `classification_accuracy` | Label match for outlook (pos/neutral/neg) and hallucination (supported/unsupported). |
-| `lexical_faithfulness` | Share of prediction content words present in the source excerpt. |
+| `lexical_faithfulness` | Share of prediction content words present in the source excerpt (default proxy). |
+| `nli_faithfulness` | Entailment probability of the prediction given the source (real NLI; opt-in via `--faithfulness nli`). |
 
 ### Task-specific metrics
 
@@ -72,13 +73,23 @@ from companies not seen in training (company-holdout split).
 - `reports/figures/baseline_metrics_by_task.json` — per-task metric breakdown.
 - `reports/baseline_eval_report.md` — human-readable Markdown report.
 
-## Known limitations of lexical faithfulness
+## Faithfulness: lexical proxy vs NLI
 
-`lexical_faithfulness` is a **lexical overlap proxy**, not entailment. It rewards
-copying source words and cannot detect contradiction, wrong attribution, or
-unsupported synthesis. Treat it as a rough screen, not a faithfulness guarantee.
-Phase 3 reference targets are also weak supervision, so absolute baseline scores
-should be read as a *reference point*, not ground truth.
+`lexical_faithfulness` (default) is a **lexical overlap proxy**, not entailment.
+It rewards copying source words and cannot detect contradiction, wrong
+attribution, or unsupported synthesis — treat it as a rough screen.
+
+For a real entailment signal, pass `--faithfulness nli` to the baseline or
+fine-tuned eval CLIs (or `EvalRunner(faithfulness="nli")`). This scores the
+prediction as a hypothesis entailed by the source premise using an MNLI model
+(`facebook/bart-large-mnli` by default), loaded lazily via the `ml` extra and
+cached. The scorer is injectable, so tests stay offline. NLI penalises
+contradiction and unsupported claims that lexical overlap misses, at the cost of
+a model download and slower scoring.
+
+Phase 3 reference targets are weak supervision (unless upgraded via the optional
+Phase 3.5 LLM-assisted pass), so absolute scores should be read as a *reference
+point*, not ground truth.
 
 ## Future improvements (Phase 6+)
 

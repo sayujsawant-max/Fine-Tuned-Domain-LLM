@@ -174,8 +174,36 @@ Extractive summaries can miss the most salient sentence; keyword/regex
 extraction has false positives/negatives; outlook labels are naive keyword
 counts. They are a reproducible *starting* signal, not ground truth.
 
-### Future improvement path
+### Minimum section length
 
-Phase 4 will upgrade targets via human review and/or LLM-assisted generation
-(with a held-out judge), keeping the same schema, splits, and validator so
-quality can be compared against this deterministic baseline.
+`extract_sections.py` reads `sections.min_section_words` from
+`configs/data_config.yaml` (override with `--min-section-words`) and drops
+sections below the threshold, so trivially short or mis-extracted sections never
+reach the dataset. `0` disables the filter.
+
+### LLM-assisted target enhancement (Phase 3.5, optional)
+
+The deterministic targets above are a reproducible *baseline*. To upgrade them
+into stronger, filing-grounded answers, run the optional Claude-API pass:
+
+```bash
+pip install -e ".[llm]"          # adds the anthropic SDK
+export ANTHROPIC_API_KEY=...
+
+python scripts/enhance_dataset.py enhance \
+  --input-path data/datasets/train.jsonl \
+  --output-path data/datasets/train_enhanced.jsonl
+# offline/credential-free dry run:
+python scripts/enhance_dataset.py enhance --input-path ... --output-path ... --mock
+```
+
+`LLMTargetGenerator` keeps the same JSONL schema and re-flags each rewritten row
+(`generation_method: llm_assisted`, `enhanced: true`, `weak_supervision: false`).
+The frozen system prompt is **prompt-cached**, so a batch over many examples pays
+the large-prefix cost once. The model is instructed to use only facts in the
+excerpt and never to give investment advice. `--mock` produces deterministic
+offline answers (used by tests); real runs need the `llm` extra + an API key.
+
+Validate and re-split the enhanced file exactly as the baseline (`make
+validate-dataset`). Compare a model trained on enhanced targets against the
+deterministic baseline via the Phase 6 before/after benchmark.

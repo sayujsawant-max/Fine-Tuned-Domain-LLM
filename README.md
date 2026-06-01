@@ -87,13 +87,29 @@ curl http://localhost:8080/v1/health
 | Group | Install | Used for |
 |-------|---------|----------|
 | `dev` | `pip install -e ".[dev]"` | pytest, ruff, black, mypy |
-| `ml` | `pip install -e ".[ml]"` | transformers, datasets, evaluate, rouge/bert-score |
-| `training` | `pip install -e ".[training]"` | torch, peft, trl, bitsandbytes, accelerate, wandb (**GPU**) |
+| `ml` | `pip install -e ".[ml]"` | transformers, datasets, evaluate, rouge/bert-score, matplotlib (+ NLI faithfulness) |
+| `training` | `pip install -e ".[training]"` | torch, transformers, peft, trl, bitsandbytes, accelerate, wandb (**GPU**) |
 | `serving` | `pip install -e ".[serving]"` | vLLM (**GPU**) |
+| `llm` | `pip install -e ".[llm]"` | anthropic SDK — optional LLM-assisted dataset enhancement |
 | `docs` | `pip install -e ".[docs]"` | mkdocs-material |
 
 Heavy GPU dependencies (`torch`, `bitsandbytes`, `peft`, `vllm`) are **never**
 part of the default install.
+
+### Hardening & optional upgrades
+
+Beyond the core 12 phases, the pipeline includes forward-compat and quality
+upgrades (all CPU-verifiable; heavy deps stay optional and lazy):
+
+- **Modern-stack training** — the QLoRA trainer works across TRL (`SFTConfig` /
+  `processing_class`) and transformers (`quantization_config`) generations, so
+  real GPU runs don't break on a current stack.
+- **NLI faithfulness** — opt into entailment-based faithfulness with
+  `--faithfulness nli` on the eval CLIs (replaces the lexical proxy; `ml` extra).
+- **LLM-assisted targets** — upgrade the weak-supervision dataset labels with
+  Claude via `scripts/enhance_dataset.py` (the `llm` extra; `--mock` runs offline).
+- **Section length filtering** — `extract_sections.py` enforces
+  `sections.min_section_words` from `configs/data_config.yaml`.
 
 ## SEC ingestion & preprocessing (Phase 2)
 

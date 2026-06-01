@@ -1,8 +1,12 @@
 # FinSage Filing Instruction Dataset
 
-> **Status: Phase 3 (deterministic baseline).** Targets are template/extractive
-> **weak supervision**, not human-written gold answers. Phase 4 will replace them
-> with reviewed / LLM-assisted targets using the same schema and splits.
+> **Status: Phase 3 (deterministic baseline) + optional Phase 3.5 enhancement.**
+> Baseline targets are template/extractive **weak supervision**, not
+> human-written gold answers. An optional LLM-assisted pass
+> (`scripts/enhance_dataset.py`, the `llm` extra) rewrites them into stronger,
+> filing-grounded answers using Claude, keeping the same schema and splits and
+> flagging rewritten rows (`generation_method: llm_assisted`,
+> `weak_supervision: false`).
 
 ## Summary
 
