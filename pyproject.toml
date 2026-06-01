@@ -89,6 +89,15 @@ docs = [
 redis = [
     "redis>=5.0,<7.0",
 ]
+# Optional benchmark-report exporters (Phase 11). matplotlib also lives in the
+# ``ml`` group; charts/HTML/PDF all degrade gracefully when these are absent.
+# WeasyPrint needs native libs and is skipped on Windows (ReportLab covers PDF).
+reporting = [
+    "matplotlib>=3.8,<4.0",
+    "markdown>=3.5,<4.0",
+    "reportlab>=4.0,<5.0",
+    "weasyprint>=60; platform_system != 'Windows'",
+]
 
 [project.scripts]
 finsage-download = "scripts.download_edgar:app"

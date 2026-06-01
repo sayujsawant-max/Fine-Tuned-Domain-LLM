@@ -163,3 +163,37 @@ a negative one. Both are reported — never hide regressions.
 
 Report regressions as well as gains. Verify numbers against the raw result files
 before they reach the README or model card.
+
+## Phase 11: Benchmark report
+
+The benchmark report (`scripts/generate_benchmark_report.py`) consumes the
+artifacts produced by **Phase 4** (`baseline_results.json`,
+`baseline_predictions.jsonl`) and **Phase 6** (`finetuned_results.json`,
+`comparison_results.json`, `comparison_summary.json`, `metric_delta_by_task.json`,
+`qualitative_comparisons.jsonl`), plus dataset stats, the training summary, and
+latency benchmarks. Nothing is recomputed — the report only *renders* existing
+artifacts, so it is fast, CPU-only, and calls no external services.
+
+**Interpreting metrics.** Overall Results show each metric for the base and
+fine-tuned model with absolute and relative deltas; a `▲`/`▼` marker flags
+improvement/regression. Task-wise Results break this down per task type.
+Faithfulness (lexical by default, optional NLI) is summarised separately because
+n-gram metrics can *under*-credit a fine-tuned answer that adds correct,
+filing-grounded detail absent from the short reference — the most common cause of
+an apparent regression.
+
+**Charts** are generated lazily with matplotlib into
+`reports/figures/report_*.png`: overall metrics, per-task mean delta, dataset
+distribution, latency percentiles, and faithfulness. Each is skipped (with a
+warning) if its data or matplotlib is unavailable; the report never fails on a
+missing chart.
+
+**Qualitative examples.** `select_qualitative_examples` picks two best
+improvements, one regression (worst single-metric drop), one average case, and one
+faithfulness case, truncating long text so filings never bloat the report.
+
+**Mock vs real, and what to rerun.** If the result artifacts carry
+`"backend": "mock"` (or core files are missing, or `--mock-mode` is set), the
+report is auto-labelled a sample/mock report and **must not** be published as real
+results. After a real fine-tune, rerun baseline eval → fine-tuned eval →
+`compare-models`, then `make report` to regenerate a publishable report.

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" role="img" aria-label="FinSage-7B logo placeholder">
+  <rect width="240" height="64" rx="10" fill="#0f172a"/>
+  <circle cx="34" cy="32" r="16" fill="none" stroke="#3b82f6" stroke-width="3"/>
+  <path d="M26 36 L32 28 L37 34 L42 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="64" y="39" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#e2e8f0">FinSage-7B</text>
+</svg>

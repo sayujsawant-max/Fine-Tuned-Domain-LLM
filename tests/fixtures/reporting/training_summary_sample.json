@@ -1,0 +1,17 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "output_dir": "checkpoints/finsage-7b",
+  "train_file": "data/datasets/train.jsonl",
+  "validation_file": "data/datasets/validation.jsonl",
+  "num_train_examples": 90,
+  "num_eval_examples": 15,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "learning_rate": 0.0002,
+  "epochs": 3,
+  "max_seq_length": 2048,
+  "packing": true,
+  "report_to": "none",
+  "final_train_loss": 0.83,
+  "final_eval_loss": 0.97
+}

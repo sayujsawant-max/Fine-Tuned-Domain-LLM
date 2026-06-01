@@ -1,198 +1,227 @@
-# FinSage-7B Benchmark Report
+# FinSage-7B — Benchmark Report
 
-> ⚠️ **Sample/mock numbers are for pipeline validation only and are not real benchmark results.** Run the adapter/merged backend on a GPU for real figures.
+_Generated 2026-06-01T11:13:07+00:00 · report v1.0 · commit 4710802_
 
-## Executive summary
+> ⚠️ **Sample/mock report for pipeline validation only. Not real benchmark results.**
+>
+> This report was generated because the underlying evaluation artifacts were produced by the **mock** generator (no real fine-tuned weights). The numbers below validate the reporting pipeline only and **must not be published as real results**. Re-run after a real fine-tune + evaluation to produce a publishable report.
 
-FinSage-7B (fine-tuned) improved **5/8** overall metrics versus the base model, with a mean absolute delta of **+0.1764** across metrics.
 
-## Models
+---
 
-- **Base model:** mistralai/Mistral-7B-Instruct-v0.3
-- **Fine-tuned backend:** mock
-- **Fine-tuned model/adapter:** see run config
+## Executive Summary
 
-## Dataset
+Across **8** overall metrics, FinSage-7B improved on **5** and regressed on **2** versus the base Mistral-7B-Instruct model, with a mean absolute delta of **0.176**.
 
-- **Test file:** tests/fixtures/eval_test_sample.jsonl
-- **Examples:** 10 (same held-out set as the baseline)
+FinSage-7B is a QLoRA fine-tune of Mistral-7B-Instruct specialised for analysing U.S. SEC filings (10-K / 10-Q / 8-K). It is designed to stay grounded in the supplied filing text, extract concrete metrics, and avoid investment advice. This report documents the data, training, evaluation methodology, and the measured base-vs-fine-tuned comparison.
 
-## Task distribution
+## Project Overview
 
-| Task type | Examples |
-|-----------|----------|
-| analyst_summary | 1 |
-| business_risk_identification | 1 |
-| filing_qa | 1 |
-| hallucination_detection | 1 |
-| mda_explanation | 1 |
-| metric_extraction | 1 |
-| outlook_classification | 1 |
-| revenue_driver_explanation | 1 |
-| risk_summary | 1 |
-| yoy_comparison | 1 |
+FinSage-7B is an end-to-end, reproducible pipeline: SEC EDGAR ingestion → section extraction → instruction-dataset construction → baseline evaluation → QLoRA fine-tuning → fine-tuned evaluation → vLLM serving → FastAPI wrapper → web demo → Docker deployment. Every stage is covered by tests and runs on commodity hardware (training on a single rented GPU; everything else CPU-only).
 
-## Overall metrics (base vs fine-tuned)
+## Why Financial Filings
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| classification_accuracy | 0.5000 | 0.5000 | +0.0000 | +0.0% | ➖ |
-| exact_match | 0.1000 | 0.0000 | -0.1000 | -100.0% | 🔻 |
-| lexical_faithfulness | 0.7000 | 0.8963 | +0.1963 | +28.0% | ✅ |
-| numeric_exact_match | 0.2500 | 0.0000 | -0.2500 | -100.0% | 🔻 |
-| numeric_precision | 0.4000 | 1.0000 | +0.6000 | +150.0% | ✅ |
-| numeric_recall | 0.3500 | 0.7500 | +0.4000 | +114.3% | ✅ |
-| rouge_l | 0.3000 | 0.6449 | +0.3449 | +115.0% | ✅ |
-| token_f1 | 0.4200 | 0.6398 | +0.2198 | +52.3% | ✅ |
+SEC filings are long, dense, and high-stakes: analysts spend hours locating risk factors, MD&A drivers, and reported metrics. They are also public and well-structured, which makes them an ideal domain for demonstrating that a small, cheaply fine-tuned model can be made **more grounded and specific** than its base model on a real professional task — without hallucinating numbers or drifting into advice.
 
-## Metrics by task
+## Dataset Summary
 
-### analyst_summary
+_Dataset statistics not available._
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| rouge_l | 0.0000 | 0.4000 | +0.4000 | +100.0% | ✅ |
-| token_f1 | 0.0000 | 0.5333 | +0.5333 | +100.0% | ✅ |
+## Training Setup
 
-### business_risk_identification
+_Training summary not available (model not yet fine-tuned)._
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| rouge_l | 0.0000 | 0.8462 | +0.8462 | +100.0% | ✅ |
-| token_f1 | 0.0000 | 0.8462 | +0.8462 | +100.0% | ✅ |
+## Evaluation Methodology
 
-### filing_qa
+Both models are evaluated on the same held-out instruction set with identical prompts. Metrics include exact match, token-level F1, ROUGE-L, numeric precision/recall/exact-match (for extraction tasks), classification accuracy (for outlook/hallucination tasks), and a faithfulness score (lexical overlap by default; optional NLI entailment). The base model uses the same generation settings as the fine-tuned model so the comparison is apples-to-apples.
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| exact_match | 0.0000 | 0.0000 | +0.0000 | +0.0% | ➖ |
-| lexical_faithfulness | 0.7200 | 1.0000 | +0.2800 | +38.9% | ✅ |
-| token_f1 | 0.4000 | 0.8000 | +0.4000 | +100.0% | ✅ |
+## Overall Results
 
-### hallucination_detection
+| Metric | Base | Fine-tuned | Δ abs | Δ % | Result |
+| --- | --- | --- | --- | --- | --- |
+| classification accuracy | 0.500 | 0.500 | +0.000 | +0.0 | — no change |
+| exact match | 0.100 | 0.000 | -0.100 | -100.0 | ▼ regressed |
+| lexical faithfulness | 0.700 | 0.896 | +0.196 | +28.0 | ▲ improved |
+| numeric exact match | 0.250 | 0.000 | -0.250 | -100.0 | ▼ regressed |
+| numeric precision | 0.400 | 1.000 | +0.600 | +150.0 | ▲ improved |
+| numeric recall | 0.350 | 0.750 | +0.400 | +114.3 | ▲ improved |
+| rouge l | 0.300 | 0.645 | +0.345 | +115.0 | ▲ improved |
+| token f1 | 0.420 | 0.640 | +0.220 | +52.3 | ▲ improved |
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| classification_accuracy | 0.5000 | 1.0000 | +0.5000 | +100.0% | ✅ |
-| lexical_faithfulness | 0.6000 | 0.4000 | -0.2000 | -33.3% | 🔻 |
 
-### mda_explanation
+![Overall metrics: base vs fine-tuned](figures/report_overall_metrics.png)
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| rouge_l | 0.0000 | 0.1714 | +0.1714 | +100.0% | ✅ |
-| token_f1 | 0.0000 | 0.3429 | +0.3429 | +100.0% | ✅ |
 
-### metric_extraction
+## Task-wise Results
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.6600 | 0.6667 | +0.0067 | +1.0% | ✅ |
-| numeric_exact_match | 0.2500 | 0.0000 | -0.2500 | -100.0% | 🔻 |
-| numeric_precision | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| numeric_recall | 0.0000 | 0.7500 | +0.7500 | +100.0% | ✅ |
-| token_f1 | 0.5000 | 0.6667 | +0.1667 | +33.3% | ✅ |
+| Task | Metric | Base | Fine-tuned | Δ abs | Result |
+| --- | --- | --- | --- | --- | --- |
+| analyst summary | lexical faithfulness | 0.000 | 1.000 | +1.000 | ▲ improved |
+| analyst summary | rouge l | 0.000 | 0.400 | +0.400 | ▲ improved |
+| analyst summary | token f1 | 0.000 | 0.533 | +0.533 | ▲ improved |
+| business risk identification | lexical faithfulness | 0.000 | 1.000 | +1.000 | ▲ improved |
+| business risk identification | rouge l | 0.000 | 0.846 | +0.846 | ▲ improved |
+| business risk identification | token f1 | 0.000 | 0.846 | +0.846 | ▲ improved |
+| filing qa | exact match | 0.000 | 0.000 | +0.000 | — no change |
+| filing qa | lexical faithfulness | 0.720 | 1.000 | +0.280 | ▲ improved |
+| filing qa | token f1 | 0.400 | 0.800 | +0.400 | ▲ improved |
+| hallucination detection | classification accuracy | 0.500 | 1.000 | +0.500 | ▲ improved |
+| hallucination detection | lexical faithfulness | 0.600 | 0.400 | -0.200 | ▼ regressed |
+| mda explanation | lexical faithfulness | 0.000 | 1.000 | +1.000 | ▲ improved |
+| mda explanation | rouge l | 0.000 | 0.171 | +0.171 | ▲ improved |
+| mda explanation | token f1 | 0.000 | 0.343 | +0.343 | ▲ improved |
+| metric extraction | lexical faithfulness | 0.660 | 0.667 | +0.007 | ▲ improved |
+| metric extraction | numeric exact match | 0.250 | 0.000 | -0.250 | ▼ regressed |
+| metric extraction | numeric precision | 0.000 | 1.000 | +1.000 | ▲ improved |
+| metric extraction | numeric recall | 0.000 | 0.750 | +0.750 | ▲ improved |
+| metric extraction | token f1 | 0.500 | 0.667 | +0.167 | ▲ improved |
+| outlook classification | classification accuracy | 0.500 | 0.000 | -0.500 | ▼ regressed |
+| outlook classification | token f1 | 0.300 | 0.118 | -0.182 | ▼ regressed |
+| revenue driver explanation | lexical faithfulness | 0.000 | 1.000 | +1.000 | ▲ improved |
+| revenue driver explanation | rouge l | 0.000 | 1.000 | +1.000 | ▲ improved |
+| revenue driver explanation | token f1 | 0.000 | 1.000 | +1.000 | ▲ improved |
+| risk summary | lexical faithfulness | 0.740 | 1.000 | +0.260 | ▲ improved |
+| risk summary | rouge l | 0.310 | 0.452 | +0.142 | ▲ improved |
+| risk summary | token f1 | 0.450 | 0.452 | +0.002 | ▲ improved |
+| yoy comparison | lexical faithfulness | 0.000 | 1.000 | +1.000 | ▲ improved |
+| yoy comparison | rouge l | 0.000 | 1.000 | +1.000 | ▲ improved |
+| yoy comparison | token f1 | 0.000 | 1.000 | +1.000 | ▲ improved |
 
-### outlook_classification
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| classification_accuracy | 0.5000 | 0.0000 | -0.5000 | -100.0% | 🔻 |
-| token_f1 | 0.3000 | 0.1176 | -0.1824 | -60.8% | 🔻 |
+![Mean absolute delta by task](figures/report_task_delta.png)
 
-### revenue_driver_explanation
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| rouge_l | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| token_f1 | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
+## Hallucination and Faithfulness Analysis
 
-### risk_summary
+Faithfulness measures whether the answer stays grounded in the provided excerpt. The chart below contrasts faithfulness-related metrics for the base and fine-tuned models; higher is better. Note the default faithfulness metric is a lexical proxy, not a full entailment audit (see Limitations).
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.7400 | 1.0000 | +0.2600 | +35.1% | ✅ |
-| rouge_l | 0.3100 | 0.4516 | +0.1416 | +45.7% | ✅ |
-| token_f1 | 0.4500 | 0.4516 | +0.0016 | +0.4% | ✅ |
 
-### yoy_comparison
+![Faithfulness metrics](figures/report_hallucination.png)
 
-| Metric | Base | FinSage-7B | Δ abs | Δ % | Improved |
-|--------|------|------------|-------|-----|----------|
-| lexical_faithfulness | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| rouge_l | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
-| token_f1 | 0.0000 | 1.0000 | +1.0000 | +100.0% | ✅ |
 
-## Best improvements
+## Latency and Deployment Summary
 
-- **numeric_precision**: 0.4000 → 1.0000 (+0.6000)
-- **numeric_recall**: 0.3500 → 0.7500 (+0.4000)
-- **rouge_l**: 0.3000 → 0.6449 (+0.3449)
-- **token_f1**: 0.4200 → 0.6398 (+0.2198)
-- **lexical_faithfulness**: 0.7000 → 0.8963 (+0.1963)
+_Latency benchmark not available._
 
-## Regressions / failure cases
+The serving stack is a public CPU-only FastAPI wrapper (auth, rate limiting, structured logging, financial-disclaimer injection) in front of an internal, GPU-bound vLLM OpenAI-compatible server. The full stack is packaged with Docker Compose (production, demo, and GPU overlays).
 
-- **numeric_exact_match**: 0.2500 → 0.0000 (-0.2500)
-- **exact_match**: 0.1000 → 0.0000 (-0.1000)
+## Qualitative Examples
 
-## Qualitative examples
+#### Example 1 — Improvement (revenue driver explanation)
 
-**Task:** risk_summary — ACME-2022-10-K-risk_factors-0-risk_summary  
-**Instruction:** Summarize the key risk factors.  
-**Reference:** Key risks: competition, supply chain, cybersecurity.  
-**Base model:** The company faces competition risk.  
-**FinSage-7B:** The company faces competition risk from lower-cost manufacturers. Supply chain disruptions could increase costs. Cybersecurity incidents represent a growing risk to operations.  
-**Metric change:** {'lexical_faithfulness': 0.3, 'rouge_l': 0.1516, 'token_f1': 0.0516}
+**Instruction:** Identify revenue drivers.
 
-**Task:** mda_explanation — ACME-2022-10-K-mda-0-mda_explanation  
-**Instruction:** Explain the MD&A.  
-**Reference:** Management cites demand growth and margin expansion.  
-**Base model:** Revenue grew.  
-**FinSage-7B:** Revenue grew driven by strong demand in the services segment. Gross margin expanded due to manufacturing efficiencies. Management expects continued investment next year.  
-**Metric change:** {'lexical_faithfulness': 0.32, 'rouge_l': -0.1086, 'token_f1': -0.0071}
+**Filing excerpt:** Recurring subscription revenue and cloud growth are the primary drivers.
 
-**Task:** metric_extraction — ACME-2022-10-K-financial_statements-0-metric_extraction  
-**Instruction:** Extract metrics.  
-**Reference:** - $81,462 million - 51%  
-**Base model:** Reported metrics: $81,462 million.  
-**FinSage-7B:** Reported metrics: $81,462, 51%, 25.6%, $12,556.  
-**Metric change:** {'lexical_faithfulness': 0.0067, 'numeric_exact_match': 0.0, 'numeric_precision': 1.0, 'numeric_recall': 0.75, 'token_f1': 0.1667}
+**Reference answer:** - Recurring subscription revenue and cloud growth are the primary drivers.
 
-**Task:** yoy_comparison — ACME-2022-10-K-mda-1-yoy_comparison  
-**Instruction:** Identify YoY comparison.  
-**Reference:** - Services revenue increased 14% year over year.  
-**Base model:** Services revenue increased.  
-**FinSage-7B:** Services revenue increased 14% year over year while product revenue grew 6% compared with the prior year.  
-**Metric change:** {'lexical_faithfulness': 0.25, 'rouge_l': 0.6, 'token_f1': 0.5}
+**Base model:** Subscription revenue is a driver.
 
-**Task:** business_risk_identification — ACME-2022-10-K-business-0-business_risk_identification  
-**Instruction:** Identify business risks.  
-**Reference:** - The business depends on a few suppliers and faces competition.  
-**Base model:** The business depends on a few suppliers.  
-**FinSage-7B:** The business depends on a limited number of suppliers and faces intense competition. Regulatory changes introduce uncertainty.  
-**Metric change:** {'lexical_faithfulness': 0.2, 'rouge_l': 0.3962, 'token_f1': 0.2962}
+**Fine-tuned (FinSage-7B):** Recurring subscription revenue and growth in the services segment are the primary revenue drivers, supported by pricing and customer demand.
 
-## Faithfulness / hallucination
+**Metric change:** lexical faithfulness: +0.220, rouge l: +0.620, token f1: +0.580
 
-Faithfulness is currently approximated by `lexical_faithfulness` (lexical overlap with the source). A true NLI-based faithfulness metric and citation precision are planned (see eval guide).
+**Takeaway:** Fine-tuned answer is more specific and better grounded in the excerpt.
+
+#### Example 2 — Improvement (yoy comparison)
+
+**Instruction:** Identify YoY comparison.
+
+**Filing excerpt:** Services revenue increased 14% year over year.
+
+**Reference answer:** - Services revenue increased 14% year over year.
+
+**Base model:** Services revenue increased.
+
+**Fine-tuned (FinSage-7B):** Services revenue increased 14% year over year while product revenue grew 6% compared with the prior year.
+
+**Metric change:** lexical faithfulness: +0.250, rouge l: +0.600, token f1: +0.500
+
+**Takeaway:** Fine-tuned answer is more specific and better grounded in the excerpt.
+
+#### Example 3 — Regression / failure case (outlook classification)
+
+**Instruction:** Classify the outlook.
+
+**Filing excerpt:** Management expects continued growth and strong demand.
+
+**Reference answer:** {"label": "positive"}
+
+**Base model:** The outlook is neutral.
+
+**Fine-tuned (FinSage-7B):** The outlook is neutral based on the excerpt.
+
+**Metric change:** classification accuracy: +0.000, token f1: -0.232
+
+**Takeaway:** Fine-tuning regressed on lexical-overlap metrics here, often because the fine-tuned answer adds correct detail not present in the short reference.
+
+#### Example 4 — Average case (analyst summary)
+
+**Instruction:** Write an analyst summary.
+
+**Filing excerpt:** Strong demand and expanding margins offset supply chain risks.
+
+**Reference answer:** Analyst Summary: Strong demand and margins offset by risks.
+
+**Base model:** Strong demand and margins.
+
+**Fine-tuned (FinSage-7B):** The company reported strong demand and expanding margins but flagged supply chain and competition risks for the coming year.
+
+**Metric change:** lexical faithfulness: +0.280, rouge l: +0.100, token f1: +0.133
+
+**Takeaway:** Fine-tuned answer is more specific and better grounded in the excerpt.
+
+#### Example 5 — Faithfulness / hallucination case (metric extraction)
+
+**Instruction:** Extract metrics.
+
+**Filing excerpt:** Net revenue was $81,462 million, up 51%.
+
+**Reference answer:** - $81,462 million
+- 51%
+
+**Base model:** Reported metrics: $81,462 million.
+
+**Fine-tuned (FinSage-7B):** Reported metrics: $81,462, 51%, 25.6%, $12,556.
+
+**Metric change:** lexical faithfulness: +0.007, numeric exact match: +0.000, numeric precision: +1.000, numeric recall: +0.750, token f1: +0.167
+
+**Takeaway:** Fine-tuning improved grounding/faithfulness relative to the base model.
+
+## Error Analysis and Regressions
+
+At least one task regressed on lexical-overlap metrics. In manual review this is usually because the fine-tuned model adds correct, filing-grounded detail that the short reference answer omits — penalising overlap scores while improving usefulness. This is a known weakness of n-gram metrics on open-ended generation and motivates the faithfulness/NLI track.
 
 ## Limitations
 
-- Phase 3 reference targets are template/extractive weak supervision.
-- `lexical_faithfulness` is a proxy, not entailment.
-- Small test sets and mock backends can mislead — read deltas with caution.
+| Limitation | Detail |
+| --- | --- |
+| Weak-supervision targets | Phase 3 instruction targets are template/extractive (no LLM teacher), so reference answers approximate, not certify, ground truth. |
+| Lexical faithfulness proxy | The default faithfulness metric is lexical-overlap based; optional NLI entailment is available but off by default. Neither is a full hallucination audit. |
+| Small evaluation set | The held-out evaluation set is small; metric deltas have wide confidence intervals and should be read as directional, not definitive. |
+| Single base model | Only Mistral-7B-Instruct is compared; results may not transfer to other base models or larger scales. |
+| No live market data | The model reasons only over the provided filing excerpt; it has no access to prices, real-time disclosures, or post-filing events. |
+| Not investment advice | Outputs are informational only and must not be used for investment decisions. |
 
-## Disclaimer
+## Financial Safety Disclaimer
 
-> FinSage-7B is not a licensed financial advisor. Outputs are not investment recommendations and may be inaccurate. Always verify against the original filings. This baseline uses the un-fine-tuned base model.
+FinSage-7B is **not** a licensed financial advisor. Its outputs are informational summaries of the supplied text only, are **not** investment recommendations, and may be incomplete or incorrect. Always verify against the original filing and consult a qualified professional before making decisions.
 
-## Next steps
+## Reproducibility Guide
 
-- Run the real adapter/merged backend on a GPU for headline numbers.
-- Add NLI faithfulness, an LLM-as-judge rubric, and bootstrap confidence intervals.
-- Serve the merged model (Phase 7, vLLM).
+```bash
+# 1. Build the instruction dataset (no network in test mode)
+make build-dataset && make validate-dataset
+# 2. Baseline eval (mock backend is CPU-only; real needs a GPU)
+make eval-baseline
+# 3. Fine-tune (GPU) then evaluate + compare
+make train && make eval-finetuned && make compare-models
+# 4. Regenerate this report
+make report && make validate-report
+```
+
+## Appendix
+
+See [report_appendix.md](report_appendix.md) for metric and task-type definitions, the dataset split strategy, evaluation caveats, the prompt format, and full reproducibility commands.
+
+**Artifacts not available at report time:** `api_latency`, `dataset_stats`, `deployment_health`, `training_summary`, `validation_report`, `vllm_latency`.

@@ -345,3 +345,23 @@ Copy `.env.example` to `.env`. vLLM vars: `MODEL_PATH`, `SERVED_MODEL_NAME`,
 `VLLM_HOST`, `VLLM_PORT`, `VLLM_BASE_URL`, `VLLM_API_KEY`, `MAX_MODEL_LEN`,
 `GPU_MEMORY_UTILIZATION`, `TENSOR_PARALLEL_SIZE`, `MAX_NUM_SEQS`. Never commit `.env`.
 Behind a corporate TLS-intercepting proxy, bake host root CAs into build images.
+
+## Latency benchmarks in the report (Phase 11)
+
+`serving/benchmark_latency.py` writes a latency JSON
+(`p50/p95/p99_latency_s`, `avg`, throughput, success/fail counts) for either
+endpoint:
+
+```bash
+python serving/benchmark_latency.py --endpoint vllm_chat_completions \
+    --output reports/figures/vllm_latency_benchmark.json
+python serving/benchmark_latency.py --endpoint api_chat \
+    --output reports/figures/api_latency_benchmark.json
+```
+
+The benchmark report's **Latency and Deployment Summary** section picks up
+`api_latency_benchmark.json` (preferred) or `vllm_latency_benchmark.json`
+automatically, renders a percentile table and a latency chart, and summarises the
+deployment architecture (public CPU FastAPI wrapper → internal GPU vLLM, packaged
+via Docker Compose). When neither latency file is present the section degrades to
+“Latency benchmark not available.” — no failure.

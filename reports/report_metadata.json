@@ -1,0 +1,41 @@
+{
+  "project_name": "FinSage-7B",
+  "generated_at": "2026-06-01T11:13:07+00:00",
+  "report_version": "1.0",
+  "mock_mode": false,
+  "is_sample_report": true,
+  "data_is_sample": true,
+  "available_artifacts": [
+    "baseline_results",
+    "comparison_results",
+    "comparison_summary",
+    "finetuned_results",
+    "metric_delta_by_task",
+    "qualitative"
+  ],
+  "missing_artifacts": [
+    "api_latency",
+    "dataset_stats",
+    "deployment_health",
+    "training_summary",
+    "validation_report",
+    "vllm_latency"
+  ],
+  "warnings": [
+    "dataset_stats: not available (data\\datasets\\dataset_stats.json)",
+    "validation_report: not available (data\\datasets\\validation_report.json)",
+    "training_summary: not available (checkpoints\\finsage-7b\\training_summary.json)",
+    "vllm_latency: not available (reports\\figures\\vllm_latency_benchmark.json)",
+    "api_latency: not available (reports\\figures\\api_latency_benchmark.json)",
+    "deployment_health: not available (reports\\figures\\full_stack_health.json)"
+  ],
+  "charts": {
+    "overall_metrics": "reports\\figures\\report_overall_metrics.png",
+    "task_delta": "reports\\figures\\report_task_delta.png",
+    "hallucination": "reports\\figures\\report_hallucination.png"
+  },
+  "git_commit": "4710802",
+  "python_version": "3.12.10",
+  "generator": "finsage.reporting v1.0",
+  "python_executable": "C:\\Users\\sayuj\\finsage-7b\\.venv\\Scripts\\python.exe"
+}

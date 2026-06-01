@@ -1,0 +1,89 @@
+{
+  "overall_comparison": {
+    "exact_match": {
+      "baseline": 0.1,
+      "finetuned": 0.0,
+      "absolute_delta": -0.1,
+      "relative_delta_pct": -100.0,
+      "improved": false
+    },
+    "token_f1": {
+      "baseline": 0.42,
+      "finetuned": 0.64,
+      "absolute_delta": 0.22,
+      "relative_delta_pct": 52.38,
+      "improved": true
+    },
+    "rouge_l": {
+      "baseline": 0.3,
+      "finetuned": 0.64,
+      "absolute_delta": 0.34,
+      "relative_delta_pct": 113.33,
+      "improved": true
+    },
+    "lexical_faithfulness": {
+      "baseline": 0.7,
+      "finetuned": 0.9,
+      "absolute_delta": 0.2,
+      "relative_delta_pct": 28.57,
+      "improved": true
+    },
+    "classification_accuracy": {
+      "baseline": 0.5,
+      "finetuned": 0.5,
+      "absolute_delta": 0.0,
+      "relative_delta_pct": 0.0,
+      "improved": false
+    }
+  },
+  "by_task_comparison": {
+    "risk_summary": {
+      "rouge_l": {
+        "baseline": 0.3,
+        "finetuned": 0.45,
+        "absolute_delta": 0.15,
+        "relative_delta_pct": 50.0,
+        "improved": true
+      },
+      "lexical_faithfulness": {
+        "baseline": 0.7,
+        "finetuned": 1.0,
+        "absolute_delta": 0.3,
+        "relative_delta_pct": 42.86,
+        "improved": true
+      }
+    },
+    "mda_explanation": {
+      "rouge_l": {
+        "baseline": 0.28,
+        "finetuned": 0.17,
+        "absolute_delta": -0.11,
+        "relative_delta_pct": -39.29,
+        "improved": false
+      },
+      "lexical_faithfulness": {
+        "baseline": 0.68,
+        "finetuned": 1.0,
+        "absolute_delta": 0.32,
+        "relative_delta_pct": 47.06,
+        "improved": true
+      }
+    },
+    "hallucination_detection": {
+      "classification_accuracy": {
+        "baseline": 0.5,
+        "finetuned": 0.5,
+        "absolute_delta": 0.0,
+        "relative_delta_pct": 0.0,
+        "improved": false
+      },
+      "lexical_faithfulness": {
+        "baseline": 0.6,
+        "finetuned": 0.8,
+        "absolute_delta": 0.2,
+        "relative_delta_pct": 33.33,
+        "improved": true
+      }
+    }
+  }
+}

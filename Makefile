@@ -63,10 +63,11 @@ check: lint typecheck test ## Run lint + typecheck + tests (+ dataset validation
 			--report-path data/datasets/validation_report.json; \
 	else echo "No dataset built; skipping dataset validation."; fi
 
-check-full: check ## Backend check + frontend checks (requires frontend deps installed)
+check-full: check ## Backend check + frontend checks + sample report (requires frontend deps)
 	@if [ -d frontend/node_modules ]; then \
 		$(MAKE) frontend-lint frontend-typecheck frontend-test; \
 	else echo "frontend/node_modules missing; run 'make frontend-install' first."; fi
+	$(MAKE) report-mock
 
 # ---------------------------------------------------------------------------
 # Data pipeline (Phase 2-4)
@@ -116,7 +117,29 @@ eval-finetuned-merged: ## Fine-tuned eval with the merged model (requires ml,tra
 compare-models: ## Compare existing baseline/fine-tuned outputs into a benchmark report
 	$(PYTHON) evaluation/compare_models.py --baseline-results reports/figures/baseline_results.json --baseline-predictions reports/figures/baseline_predictions.jsonl --finetuned-results reports/figures/finetuned_results.json --finetuned-predictions reports/figures/finetuned_predictions.jsonl --output-dir reports/figures --report-path reports/benchmark_report.md
 
-report: compare-models ## Alias for compare-models
+report: ## Generate the polished benchmark report from real artifacts (Phase 11)
+	$(PYTHON) scripts/generate_benchmark_report.py generate \
+		--input-dir reports/figures \
+		--output-dir reports \
+		--generate-charts \
+		--export-pdf \
+		--export-html
+
+report-mock: ## Generate a clearly-labelled sample report from fixtures (Phase 11)
+	$(PYTHON) scripts/generate_benchmark_report.py generate \
+		--input-dir tests/fixtures/reporting \
+		--output-dir /tmp/finsage_report_test \
+		--dataset-stats-path tests/fixtures/reporting/dataset_stats_sample.json \
+		--training-summary-path tests/fixtures/reporting/training_summary_sample.json \
+		--mock-mode \
+		--generate-charts \
+		--export-html \
+		--no-export-pdf
+
+validate-report: ## Validate the generated benchmark report (Phase 11)
+	$(PYTHON) scripts/validate_report.py \
+		--report-path reports/benchmark_report.md \
+		--metadata-path reports/report_metadata.json
 
 # ---------------------------------------------------------------------------
 # Serving (Phase 7: vLLM)

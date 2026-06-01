@@ -1,0 +1,47 @@
+{
+  "total_examples": 120,
+  "examples_per_split": { "train": 90, "validation": 15, "test": 15 },
+  "examples_per_task_type": {
+    "risk_summary": 24,
+    "mda_explanation": 18,
+    "metric_extraction": 20,
+    "filing_qa": 16,
+    "hallucination_detection": 12,
+    "analyst_summary": 10,
+    "outlook_classification": 8,
+    "revenue_driver_explanation": 7,
+    "yoy_comparison": 3,
+    "business_risk_identification": 2
+  },
+  "examples_per_section": {
+    "risk_factors": 40,
+    "mda": 35,
+    "business": 25,
+    "financial_statements": 20
+  },
+  "average_input_length": 812.4,
+  "average_output_length": 196.7,
+  "max_input_length": 2048,
+  "min_input_length": 64,
+  "per_split": {
+    "train": {
+      "examples": 90,
+      "unique_tickers": ["ACME", "GLOBEX"],
+      "unique_ciks": ["0000111", "0000222"],
+      "year_range": ["2019", "2022"]
+    },
+    "validation": {
+      "examples": 15,
+      "unique_tickers": ["INITECH"],
+      "unique_ciks": ["0000333"],
+      "year_range": ["2020", "2021"]
+    },
+    "test": {
+      "examples": 15,
+      "unique_tickers": ["UMBRELLA"],
+      "unique_ciks": ["0000444"],
+      "year_range": ["2021", "2022"]
+    }
+  },
+  "leakage_check": { "train_test_company_overlap": 0, "passed": true }
+}

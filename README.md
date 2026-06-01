@@ -771,6 +771,56 @@ over HTTPS, restrict CORS, keep vLLM internal, and review
 | `401` from API | Send a valid `X-API-Key`; in prod set a real `API_SECRET_KEY` |
 | `port is already allocated` | Stop the conflicting process or change the published port |
 
+## Phase 11: Benchmark Report Polish
+
+A polished, self-contained benchmark report for recruiters, hiring managers, and
+ML engineers. It consumes the Phase 4 (baseline) and Phase 6 (fine-tuned +
+comparison) artifacts plus dataset/training/latency JSON and renders a 16-section
+Markdown report with charts, an HTML export, and a PDF.
+
+**Required input artifacts** (all optional; missing ones render as “Not available”):
+
+- `reports/figures/{baseline,finetuned,comparison}_results.json`,
+  `comparison_summary.json`, `metric_delta_by_task.json`,
+  `qualitative_comparisons.jsonl`
+- `data/datasets/dataset_stats.json`, `data/datasets/validation_report.json`
+- `checkpoints/finsage-7b/training_summary.json`
+- `reports/figures/{vllm,api}_latency_benchmark.json`
+
+**Generate the report:**
+
+```bash
+make report            # real report from reports/figures
+make report-mock       # clearly-labelled SAMPLE report from fixtures → /tmp
+make validate-report   # structural validation (sections, disclaimer, no TODOs)
+
+# Direct (no make):
+python scripts/generate_benchmark_report.py generate \
+    --input-dir reports/figures --output-dir reports \
+    --generate-charts --export-pdf --export-html
+```
+
+**Outputs:** `reports/benchmark_report.md`, `reports/benchmark_report.pdf` (if a
+PDF backend is installed), `reports/benchmark_report.html`,
+`reports/report_metadata.json`, and `reports/figures/report_*.png` charts.
+
+**PDF/charts are optional.** Install extras with `pip install -e ".[reporting]"`
+(matplotlib, markdown, reportlab; WeasyPrint on non-Windows). Without them, charts
+are skipped, HTML falls back to a simple wrapper, and PDF export writes
+`reports/PDF_EXPORT_SKIPPED.md` explaining how to enable it — the report still
+generates.
+
+**How to interpret it:** start with the Executive Summary and Overall Results
+(base vs fine-tuned per metric), then Task-wise Results and the Hallucination /
+Faithfulness analysis. Qualitative Examples show side-by-side answers; Error
+Analysis explains regressions (often n-gram metrics penalising correct added
+detail). Limitations and the disclaimer are mandatory sections.
+
+> ⚠️ **Do not publish mock numbers as real results.** Until a real fine-tune +
+> evaluation has been run, the generated report auto-detects the `mock` backend
+> and carries a prominent sample/mock banner. Re-run `make report` on real Phase 6
+> artifacts to produce a publishable report.
+
 ## Deployment plan
 
 Docker Compose orchestrates the stack: `frontend` (Next.js, CPU) → `api` (public

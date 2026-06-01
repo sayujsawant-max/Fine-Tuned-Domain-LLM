@@ -71,3 +71,16 @@ detail.
 - [ ] Demo mode link works with no backend.
 - [ ] Full stack reachable end to end; comparison + benchmark panels render.
 - [ ] Graceful failure: stopping vLLM yields a clean `503` / demo fallback, not a crash.
+
+## 11. Benchmark report (before publishing)
+
+- [ ] `make report` generated `reports/benchmark_report.md` from **real** Phase 6
+      artifacts (not the mock fixtures).
+- [ ] `make validate-report` passes.
+- [ ] Verify the PDF (`reports/benchmark_report.pdf`) opens and renders the tables.
+- [ ] **No mock/sample label remains** in the real report (no "Sample/mock report"
+      banner; metadata `is_sample_report` is `false`).
+- [ ] No `TODO` markers remain in the report.
+- [ ] Limitations and the financial-safety disclaimer sections are present.
+- [ ] Charts under `reports/figures/report_*.png` are current (re-run after any new
+      evaluation).

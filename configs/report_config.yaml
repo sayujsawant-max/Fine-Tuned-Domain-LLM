@@ -1,0 +1,38 @@
+# Benchmark report configuration (Phase 11).
+#
+# Consumed as documentation / defaults for `scripts/generate_benchmark_report.py`.
+# The CLI accepts the same values as command-line options; this file records the
+# canonical defaults in one place.
+
+report:
+  project_name: FinSage-7B
+  input_dir: reports/figures
+  output_dir: reports
+  markdown_path: reports/benchmark_report.md
+  pdf_path: reports/benchmark_report.pdf
+  html_path: reports/benchmark_report.html
+  metadata_path: reports/report_metadata.json
+  mock_mode: false
+
+inputs:
+  dataset_stats_path: data/datasets/dataset_stats.json
+  validation_report_path: data/datasets/validation_report.json
+  training_summary_path: checkpoints/finsage-7b/training_summary.json
+  baseline_results_path: reports/figures/baseline_results.json
+  finetuned_results_path: reports/figures/finetuned_results.json
+  comparison_results_path: reports/figures/comparison_results.json
+  comparison_summary_path: reports/figures/comparison_summary.json
+  metric_delta_by_task_path: reports/figures/metric_delta_by_task.json
+  qualitative_comparisons_path: reports/figures/qualitative_comparisons.jsonl
+  api_latency_path: reports/figures/api_latency_benchmark.json
+  vllm_latency_path: reports/figures/vllm_latency_benchmark.json
+
+exports:
+  generate_charts: true
+  export_pdf: true
+  export_html: true
+
+validation:
+  require_disclaimer: true
+  require_limitations: true
+  fail_on_todo: true

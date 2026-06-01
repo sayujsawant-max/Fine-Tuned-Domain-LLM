@@ -68,9 +68,19 @@ data/datasets/*
 *.htm
 !tests/fixtures/**
 
-# Generated report figures
+# Generated report figures (raw eval artifacts stay local; keep the polished
+# benchmark-report charts so the committed report renders on GitHub).
 reports/figures/*
 !reports/figures/.gitkeep
+!reports/figures/report_*.png
+
+# Benchmark report (Phase 11): keep the Markdown, PDF, metadata and the
+# PDF-skip note; HTML is covered by the *.html rule above. Drop scratch assets.
+!reports/benchmark_report.md
+!reports/benchmark_report.pdf
+!reports/report_metadata.json
+!reports/PDF_EXPORT_SKIPPED.md
+reports/report_assets/*.tmp
 
 # ---------------------------------------------------------------------------
 # Frontend (Phase 9: Next.js demo)
@@ -80,3 +90,4 @@ frontend/.next/
 frontend/out/
 frontend/.env.local
 frontend/coverage/
+tests/fixtures/reporting/report_*.png

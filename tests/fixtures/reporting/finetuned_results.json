@@ -1,0 +1,18 @@
+{
+  "backend": "mock",
+  "model_id": null,
+  "test_file": "tests/fixtures/eval_test_sample.jsonl",
+  "num_examples": 6,
+  "overall": {
+    "exact_match": 0.0,
+    "token_f1": 0.64,
+    "rouge_l": 0.64,
+    "lexical_faithfulness": 0.9,
+    "classification_accuracy": 0.5
+  },
+  "by_task": {
+    "risk_summary": { "rouge_l": 0.45, "token_f1": 0.45, "lexical_faithfulness": 1.0 },
+    "mda_explanation": { "rouge_l": 0.17, "token_f1": 0.34, "lexical_faithfulness": 1.0 },
+    "hallucination_detection": { "classification_accuracy": 0.5, "lexical_faithfulness": 0.8 }
+  }
+}

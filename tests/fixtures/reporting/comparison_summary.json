@@ -1,0 +1,10 @@
+{
+  "metrics_compared": 5,
+  "metrics_improved": 3,
+  "metrics_regressed": 1,
+  "mean_absolute_delta": 0.172,
+  "baseline_backend": "mock",
+  "finetuned_backend": "mock",
+  "num_examples_baseline": 6,
+  "num_examples_finetuned": 6
+}
