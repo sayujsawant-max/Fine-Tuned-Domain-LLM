@@ -1,0 +1,24 @@
+# Data ingestion + preprocessing configuration (Phase 2).
+edgar:
+  rate_limit_per_second: 5
+  timeout: 30
+  max_retries: 3
+  default_forms:
+    - 10-K
+    - 10-Q
+  default_start_year: 2021
+  default_end_year: 2023
+  limit_per_company: 5
+  raw_output_dir: data/raw/sec
+  processed_output_dir: data/processed/sec
+  raw_manifest_path: data/raw/sec/manifest.jsonl
+  processed_manifest_path: data/processed/sec/manifest.jsonl
+
+sections:
+  target_sections:
+    - business
+    - risk_factors
+    - mda
+    - market_risk
+    - financial_statements
+  min_section_words: 100

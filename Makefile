@@ -2,8 +2,8 @@
 PYTHON ?= python
 
 .PHONY: help install install-dev install-ml install-training install-serving \
-        lint format typecheck test check download-data build-dataset \
-        validate-dataset train eval-baseline eval-finetuned serve-api \
+        lint format typecheck test check download-data extract-sections \
+        build-dataset validate-dataset train eval-baseline eval-finetuned serve-api \
         serve-vllm docker-build docker-up report
 
 help: ## Show this help
@@ -49,8 +49,11 @@ check: lint typecheck test ## Run lint + typecheck + tests
 # ---------------------------------------------------------------------------
 # Data pipeline (Phase 2-4)
 # ---------------------------------------------------------------------------
-download-data: ## Download SEC EDGAR filings (placeholder)
-	$(PYTHON) scripts/download_edgar.py run
+download-data: ## Download a small set of SEC EDGAR filings
+	$(PYTHON) scripts/download_edgar.py download --tickers AAPL MSFT --forms 10-K --start-year 2022 --end-year 2023 --limit-per-company 1
+
+extract-sections: ## Extract sections from downloaded filings into clean text
+	$(PYTHON) scripts/extract_sections.py extract --manifest-path data/raw/sec/manifest.jsonl --output-dir data/processed/sec --processed-manifest-path data/processed/sec/manifest.jsonl
 
 build-dataset: ## Build the JSONL instruction dataset (placeholder)
 	$(PYTHON) scripts/build_instruction_dataset.py run

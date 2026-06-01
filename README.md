@@ -2,7 +2,7 @@
 
 > A fine-tuned domain LLM for financial filing analysis — adapting Mistral-7B to SEC filings with QLoRA, rigorous before/after evaluation, and production serving.
 
-**Current status: Phase 1 — Project scaffold ✅** (lightweight, CPU-friendly, no GPU or model downloads required)
+**Current status: Phase 2 — SEC EDGAR ingestion & preprocessing ✅** (lightweight, CPU-friendly, no GPU or model downloads required)
 
 ---
 
@@ -46,8 +46,8 @@ vLLM (OpenAI-compatible)  →  FastAPI (auth, logging, disclaimer)  →  Fronten
 | Phase | Deliverable | Status |
 |------:|-------------|--------|
 | 1 | Project scaffold, configs, API stubs, tests, tooling | ✅ Done |
-| 2 | SEC EDGAR ingestion | ⏳ Planned |
-| 3 | Section extraction + cleaning | ⏳ Planned |
+| 2 | SEC EDGAR ingestion + section preprocessing | ✅ Done |
+| 3 | Chunking + dataset-ready cleaning | ⏳ Planned |
 | 4 | Instruction dataset generation (JSONL) | ⏳ Planned |
 | 5 | Baseline evaluation (base Mistral-7B) | ⏳ Planned |
 | 6 | QLoRA fine-tuning | ⏳ Planned |
@@ -95,6 +95,62 @@ curl http://localhost:8080/v1/health
 
 Heavy GPU dependencies (`torch`, `bitsandbytes`, `peft`, `vllm`) are **never**
 part of the default install.
+
+## SEC ingestion & preprocessing (Phase 2)
+
+Ingest public filings from SEC EDGAR and turn them into clean, section-level
+text. CPU-only — no model or GPU dependencies.
+
+**1. Set a descriptive User-Agent** (SEC fair-access rules require one; requests
+without it are rejected):
+
+```bash
+# macOS/Linux
+export EDGAR_USER_AGENT="Your Name your.email@example.com"
+# Windows PowerShell
+$env:EDGAR_USER_AGENT = "Your Name your.email@example.com"
+```
+
+Or add it to your `.env` file (see `.env.example`).
+
+**2. Download filings** → raw HTML + a JSONL manifest:
+
+```bash
+python scripts/download_edgar.py download \
+  --tickers AAPL MSFT \
+  --forms 10-K \
+  --start-year 2022 --end-year 2023 \
+  --limit-per-company 1
+```
+
+**3. Extract sections** → one clean `.txt` per section + a processed manifest:
+
+```bash
+python scripts/extract_sections.py extract \
+  --manifest-path data/raw/sec/manifest.jsonl \
+  --output-dir data/processed/sec \
+  --processed-manifest-path data/processed/sec/manifest.jsonl
+```
+
+`make download-data` and `make extract-sections` run small defaults.
+
+### Data layout
+
+```
+data/raw/sec/{ticker_or_cik}/{form}/{year}/{accession}.html      # raw filings
+data/raw/sec/manifest.jsonl                                       # download manifest
+data/processed/sec/{ticker_or_cik}/{form}/{year}/{accession}/{section}.txt
+data/processed/sec/manifest.jsonl                                 # processed manifest
+data/cache/edgar/                                                 # cached SEC JSON
+```
+
+Extracted sections: `business`, `risk_factors`, `mda`, `market_risk`,
+`financial_statements`.
+
+> **SEC fair access:** the client rate-limits to 5 req/s, retries transient
+> errors, and caches metadata. Use **public filings only**, and **do not commit
+> raw/processed SEC data** — `data/raw/`, `data/processed/`, and `data/cache/`
+> are git-ignored. See [docs/dataset_guide.md](docs/dataset_guide.md).
 
 ## Dataset strategy
 

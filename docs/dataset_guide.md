@@ -1,46 +1,110 @@
-# Dataset Guide (Phases 2–4)
+# Dataset Guide
 
-## Pipeline
+Covers SEC ingestion + preprocessing (Phase 2, implemented) and the
+instruction-dataset build that follows (Phases 3–4, planned).
+
+## Data source
+
+All data comes from **SEC EDGAR — public filings only**. We never use private,
+proprietary, or insider information. Endpoints:
+
+- Company tickers: `https://www.sec.gov/files/company_tickers.json`
+- Submissions:     `https://data.sec.gov/submissions/CIK##########.json`
+- Documents:       `https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{doc}`
+
+**SEC fair access.** Every request sends a descriptive `User-Agent` from
+`EDGAR_USER_AGENT`. The client rate-limits to 5 req/s, retries `429/5xx` with
+backoff, and caches the JSON metadata under `data/cache/edgar/` so it is never
+re-fetched. Do not scrape aggressively.
+
+## Pipeline (Phase 2)
 
 ```
-download_edgar.py  → data/raw/        (raw filing HTML)
-extract_sections.py → data/processed/ (Risk Factors / MD&A / Financials)
-build_instruction_dataset.py → data/datasets/{train,validation,test}.jsonl
-validate_dataset.py → schema + task-type checks
+download_edgar.py download  → data/raw/sec/...           + raw manifest
+extract_sections.py extract → data/processed/sec/...     + processed manifest
 ```
 
-## 1. Download (Phase 2)
+### 1. Download
 
 ```bash
-python scripts/download_edgar.py run --cik 0000320193 --form-type 10-K --limit 5
+export EDGAR_USER_AGENT="Your Name your.email@example.com"
+python scripts/download_edgar.py download \
+  --tickers AAPL MSFT --forms 10-K 10-Q \
+  --start-year 2021 --end-year 2023 --limit-per-company 5
 ```
 
-SEC EDGAR requires a descriptive `User-Agent` with contact info — set
-`EDGAR_USER_AGENT` in `.env`. Respect the ~10 req/s fair-access limit.
+Resolves each ticker to its CIK, lists filings (filtered by form and filing
+year, newest first), and downloads each primary document. Existing files are
+skipped unless `--force`.
 
-## 2. Extract sections (Phase 3)
+### 2. Extract sections
 
 ```bash
-python scripts/extract_sections.py run --raw-dir data/raw --out-dir data/processed
+python scripts/extract_sections.py extract \
+  --manifest-path data/raw/sec/manifest.jsonl \
+  --output-dir data/processed/sec \
+  --processed-manifest-path data/processed/sec/manifest.jsonl
 ```
 
-Priority sections: Risk Factors (1A), MD&A (7), Financial Statements (8),
-Market Risk (7A), Business (1).
+Cleans HTML to text and extracts five sections via robust `Item`-heading
+detection (which skips short table-of-contents entries): `business` (Item 1),
+`risk_factors` (1A), `mda` (7), `market_risk` (7A), `financial_statements` (8).
+Missing sections are skipped, not fatal.
 
-## 3. Chunk + build instructions (Phase 4)
+## Storage formats
 
-- Chunk to ~512 tokens with 64-token overlap, preserving
-  `ticker`, `year`, `filing_type`, `section`, `chunk_id`.
-- Emit one of the 10 task types per example (see `finsage.data.instruction_builder`).
-- **Targets (`output`) come from a teacher model or filing-grounded extraction —
-  never hand-fabricated.**
+### Raw filings
 
-```bash
-python scripts/build_instruction_dataset.py run
-python scripts/validate_dataset.py run
+```
+data/raw/sec/{ticker_or_cik}/{form}/{year}/{accession_no_dashes}.html
+data/raw/sec/manifest.jsonl
 ```
 
-## 4. Splitting (no leakage)
+### Processed sections
 
-Split by **company and year**, not by random example. See
-[../data/dataset_card.md](../data/dataset_card.md).
+```
+data/processed/sec/{ticker_or_cik}/{form}/{year}/{accession_no_dashes}/{section}.txt
+data/processed/sec/manifest.jsonl
+```
+
+## Manifest fields
+
+**Raw manifest** (one row per filing) — from `EdgarClient`:
+
+| Field | Meaning |
+|-------|---------|
+| `cik` | 10-digit zero-padded CIK |
+| `ticker` | Ticker symbol (when known) |
+| `accession_number` / `accession_number_no_dashes` | EDGAR accession id |
+| `filing_date` / `report_date` | ISO dates |
+| `form` | Form type (`10-K`, `10-Q`, …) |
+| `primary_document` | Primary document file name |
+| `filing_url` / `document_url` | Index page / primary document URL |
+| `raw_path` / `downloaded` | Local path and success flag |
+
+**Processed manifest** (one row per extracted section) — from `FilingPreprocessor`:
+
+`raw_path`, `processed_path`, `section`, `text_chars`, `text_words`, `cik`,
+`ticker`, `form`, `filing_date`, `report_date`, `accession_number`, `source_url`.
+
+## ⚠️ Leakage warning (for the future train/test split)
+
+When the instruction dataset is built (Phase 4), **split by company and year, not
+by random example** — e.g. train on 2018–2022, test on 2023, and hold some
+companies out entirely. Splitting raw chunks at random leaks near-duplicate text
+(boilerplate risk factors recur across years/filers) and inflates metrics. Track
+`ticker` + `year` through every stage so the split can be enforced.
+
+## Do not commit SEC data
+
+`data/raw/`, `data/processed/`, and `data/cache/` (and `*.html` / `*.htm`) are
+git-ignored. Keep filings out of the repo — they are large and reproducible from
+the manifests. Only `.gitkeep` placeholders, the dataset card, and small test
+fixtures under `tests/fixtures/` are tracked.
+
+## Next (Phases 3–4)
+
+Chunk each section (~512 tokens, 64 overlap, metadata-preserving) and build the
+JSONL instruction dataset with the 10 task types (see
+[../data/dataset_card.md](../data/dataset_card.md)). Targets are generated by a
+teacher model or filing-grounded extraction — never hand-fabricated.

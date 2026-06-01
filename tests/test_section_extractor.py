@@ -1,52 +1,74 @@
-"""Tests for SectionExtractor."""
+"""Tests for SectionExtractor using the sample 10-K fixture."""
 
 from __future__ import annotations
 
-from finsage.data.section_extractor import SectionExtractor
+from finsage.data.section_extractor import TARGET_SECTIONS, SectionExtractor
 
-SAMPLE_HTML = """
-<html><body>
-<p>Item 1. Business</p>
-<p>We make widgets.</p>
-<p>Item 1A. Risk Factors</p>
-<p>Our business faces competition risk and supply chain risk.</p>
-<p>Item 1B. Unresolved Staff Comments</p>
-<p>None.</p>
-<p>Item 7. Management's Discussion and Analysis</p>
-<p>Revenue grew due to strong demand.</p>
-<p>Item 7A. Quantitative Disclosures</p>
-<p>Item 8. Financial Statements</p>
-<p>Net income was reported here.</p>
-<p>Item 9. Changes</p>
-</body></html>
-"""
+extractor = SectionExtractor()
 
 
-def test_extract_risk_factors_returns_dict():
-    """Risk-factor extraction returns a dict with the expected keys and text."""
-    result = SectionExtractor().extract_risk_factors(SAMPLE_HTML)
-    assert isinstance(result, dict)
-    assert result["section"] == "Risk Factors"
-    assert result["item"] == "1A"
+def test_extracts_business(sample_10k_html):
+    """Business (Item 1) is extracted and excludes the next section."""
+    result = extractor.extract_business(sample_10k_html)
+    assert result["section"] == "business"
+    assert "premium widgets" in result["text"]
+    # Boundary: must not bleed into Risk Factors.
+    assert "competition risk" not in result["text"]
+    # Must be the real section, not the short table-of-contents entry.
+    assert len(result["text"].split()) > 20
+
+
+def test_extracts_risk_factors(sample_10k_html):
+    """Risk Factors (Item 1A) is extracted with its body text."""
+    result = extractor.extract_risk_factors(sample_10k_html)
     assert "competition risk" in result["text"]
-    assert "Item 1B" not in result["text"]
+    assert "supply chain" in result["text"]
+    assert "Revenue for fiscal" not in result["text"]
 
 
-def test_extract_mda_returns_dict():
-    """MD&A extraction returns a dict containing the discussion text."""
-    result = SectionExtractor().extract_mda(SAMPLE_HTML)
-    assert result["section"] == "MD&A"
-    assert "Revenue grew" in result["text"]
+def test_extracts_mda(sample_10k_html):
+    """MD&A (Item 7) is extracted with its body text."""
+    result = extractor.extract_mda(sample_10k_html)
+    assert "Revenue for fiscal 2022 grew 12%" in result["text"]
 
 
-def test_extract_financial_statements_returns_dict():
-    """Financial statement extraction returns a dict containing the body text."""
-    result = SectionExtractor().extract_financial_statements(SAMPLE_HTML)
-    assert result["section"] == "Financial Statements"
-    assert "Net income" in result["text"]
+def test_extracts_market_risk(sample_10k_html):
+    """Market Risk (Item 7A) is extracted with its body text."""
+    result = extractor.extract_market_risk(sample_10k_html)
+    assert "interest-rate risk" in result["text"]
 
 
-def test_missing_section_returns_empty_text():
-    """A document without the section yields an empty (but valid) result."""
-    result = SectionExtractor().extract_risk_factors("<html><body>nothing</body></html>")
-    assert result["text"] == ""
+def test_extracts_financial_statements(sample_10k_html):
+    """Financial Statements (Item 8) is extracted with its body text."""
+    result = extractor.extract_financial_statements(sample_10k_html)
+    assert "Net revenue for fiscal 2022 was 1,250" in result["text"]
+
+
+def test_extract_sections_returns_all_five(sample_10k_html):
+    """All five target sections are found in the sample filing."""
+    sections = extractor.extract_sections(sample_10k_html)
+    assert set(sections) == set(TARGET_SECTIONS)
+    assert all(text.strip() for text in sections.values())
+
+
+def test_handles_missing_section_without_failing():
+    """A filing lacking a section yields empty text / no key, not an error."""
+    html = "<html><body><p>Nothing relevant here.</p></body></html>"
+    assert extractor.extract_risk_factors(html)["text"] == ""
+    assert extractor.extract_sections(html) == {}
+
+
+def test_clean_html_removes_scripts_and_styles(sample_10k_html):
+    """Script and style content is stripped from cleaned text."""
+    cleaned = extractor.clean_html(sample_10k_html)
+    assert "var tracking" not in cleaned
+    assert "color: #999" not in cleaned
+    assert "ACME WIDGETS" in cleaned
+
+
+def test_clean_html_has_no_excessive_whitespace(sample_10k_html):
+    """Cleaned text has no double spaces or non-breaking spaces."""
+    cleaned = extractor.clean_html(sample_10k_html)
+    assert "  " not in cleaned
+    assert "\xa0" not in cleaned
+    assert "\t" not in cleaned

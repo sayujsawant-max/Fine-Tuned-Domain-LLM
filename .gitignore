@@ -46,12 +46,18 @@ mlruns/
 *.pt
 *.gguf
 
-# Raw + processed data (only .gitkeep / cards are tracked)
+# Raw / processed / cached SEC data — never commit filings (only .gitkeep / cards)
 data/raw/*
 data/processed/*
+data/cache/*
 data/datasets/*
 !data/**/.gitkeep
 !data/dataset_card.md
+
+# Filing HTML anywhere (but keep small test fixtures)
+*.html
+*.htm
+!tests/fixtures/**
 
 # Generated report figures
 reports/figures/*
